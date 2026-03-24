@@ -1,0 +1,5 @@
+{
+  "name": "muxwatch",
+  "version": "1.0.0",
+  "description": "Monitor Claude Code sessions in tmux — live status in window titles and waybar"
+}

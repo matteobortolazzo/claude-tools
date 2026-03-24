@@ -1,0 +1,16 @@
+.worktrees/
+.claude/plans/
+.claude/settings.local.json
+.env
+.env.*
+
+# Go
+muxwatch/muxwatch
+muxwatch/dist/
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/

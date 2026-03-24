@@ -1,0 +1,69 @@
+FROM ubuntu:24.04
+
+ARG DOTNET_SDK_VERSION=10.0.100
+ARG NODE_MAJOR=24
+ARG GO_VERSION=1.24.1
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── System packages ──────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl wget gnupg2 \
+    git git-lfs openssh-client \
+    sudo unzip zip tar xz-utils \
+    build-essential pkg-config libssl-dev \
+    less vim nano jq ripgrep fd-find bat \
+    procps htop lsof \
+    python3 python3-pip python3-venv \
+    locales \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Locale ───────────────────────────────────────────────────────
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+
+# ── .NET SDK ─────────────────────────────────────────────────────
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --version "${DOTNET_SDK_VERSION}" --install-dir /usr/share/dotnet \
+    && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
+    && rm /tmp/dotnet-install.sh
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+
+# ── Node.js + npm ────────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Go ───────────────────────────────────────────────────────────
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+    | tar -C /usr/local -xzf -
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# ── GitHub CLI ───────────────────────────────────────────────────
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Non-root user ────────────────────────────────────────────────
+RUN userdel -r "$(getent passwd 1000 | cut -d: -f1)" 2>/dev/null || true \
+    && groupmod -n dev "$(getent group 1000 | cut -d: -f1)" 2>/dev/null || groupadd -g 1000 dev \
+    && useradd -m -u 1000 -g 1000 -s /bin/bash dev \
+    && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/dev
+
+RUN mkdir -p /workspace && chown dev:dev /workspace
+
+USER dev
+WORKDIR /workspace
+
+ENV PATH="/home/dev/.local/bin:/home/dev/go/bin:${PATH}"
+ENV GOPATH="/home/dev/go"
+
+COPY --chown=dev:dev entrypoint.sh /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

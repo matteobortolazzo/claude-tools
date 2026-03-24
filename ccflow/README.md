@@ -1,0 +1,241 @@
+# ccflow — Claude Code Workflow Plugin
+
+Ticket refinement and automated implementation pipeline for GitHub.
+
+## What it does
+
+| Skill | Description |
+|-------|-------------|
+| `/ccflow:configure` | Interactive project setup: tech stack, sandboxing, MCP/LSP servers |
+| `/ccflow:refine <ticket-id>` | Iterative ticket refinement until it's ready for planning |
+| `/ccflow:design <ticket-id \| description>` | Interactive design reasoning and `.pen` file creation using Pencil |
+| `/ccflow:implement <ticket-id>` | Full pipeline: plan, test, implement, refactor, security review, code review, lessons, PR |
+| `/ccflow:address-review <pr-number>` | Address PR review comments — fetch, evaluate, fix, reply, push, re-request review |
+| `/ccflow:sync` | Pull latest main, rebase active worktrees, prune stale remotes, clean up merged branches |
+
+## Prerequisites
+
+### Required
+- **Claude Code** CLI installed and authenticated
+- **GitHub CLI** (`gh`): for GitHub Issues and PRs — [install](https://cli.github.com/)
+- **Node.js**: only required if using Context7 (MCP server for live documentation lookup)
+
+### Optional: LSP Servers
+
+LSP servers provide real-time diagnostics (type errors, unused variables, dead code) during implementation. Install any that match your stack:
+
+| Stack | Server | Install Command |
+|-------|--------|----------------|
+| TypeScript / JavaScript | typescript-language-server | `npm install -g typescript-language-server typescript` |
+| Python | pyright | `pip install pyright` or `npm install -g pyright` |
+| Rust | rust-analyzer | See [rust-analyzer docs](https://rust-analyzer.github.io/manual.html#installation) |
+| C# / .NET | csharp-ls | `dotnet tool install --global csharp-ls` |
+| Go | gopls | `go install golang.org/x/tools/gopls@latest` |
+
+Run `/ccflow:configure` to detect and enable LSP servers for your project.
+
+### Authentication
+
+```bash
+gh auth login
+```
+The `gh` CLI stores credentials in `~/.config/gh/hosts.yml`. It also respects `GITHUB_TOKEN`/`GH_TOKEN` env vars as a fallback for non-interactive environments.
+
+### Sandbox support (Linux / WSL2)
+Sandboxing provides OS-level filesystem and network isolation for autonomous execution. It requires:
+- **bubblewrap** (`bwrap`): `sudo apt install bubblewrap` (or `sudo pacman -S bubblewrap`)
+- **socat**: `sudo apt install socat` (or `sudo pacman -S socat`)
+
+macOS sandbox support is built into Claude Code and requires no extra packages.
+
+## Installation
+
+### Via marketplace (recommended)
+
+```bash
+# Register the repo as a marketplace (works with private repos too)
+claude plugin marketplace add matteobortolazzo/claude-tools
+
+# Install the plugin (persists across sessions)
+claude plugin install ccflow
+```
+
+To update later: `claude plugin update ccflow`
+
+### Manual (per-session)
+
+```bash
+claude --plugin-dir /path/to/ccflow
+```
+
+## Quick Start
+
+```bash
+# 1. Start Claude Code (plugin loads automatically if installed via marketplace)
+claude
+
+# 2. Configure the project (one-time setup)
+/ccflow:configure
+
+# 3. Refine a ticket (optional but recommended)
+/ccflow:refine 12345
+
+# 4. Design a ticket (optional — for frontend/UI tickets)
+/ccflow:design 12345
+
+# 5. Implement a ticket
+/ccflow:implement 12345
+```
+
+### What `/ccflow:configure` creates
+
+```
+your-project/
+├── CLAUDE.md              # (or in .claude/ — user's choice during configure)
+├── .claudeignore          # Files tracked by git but excluded from Claude's context
+├── .claude/
+│   ├── config.json        # ccflow configuration (includes claudeMdLocation)
+│   ├── settings.json      # Sandbox, permissions, and allowed domains
+│   └── rules/
+│       ├── lessons-learned.md   # Captured mistakes for future prevention
+│       └── <stack-rules>.md     # Stack-specific coding rules
+└── .worktrees/            # Git worktrees for feature branches (gitignored)
+```
+
+### Monorepo Support
+
+For monorepos, `/ccflow:configure` detects projects automatically and creates a **progressive disclosure** structure — project-specific context only loads when Claude accesses files in that subtree, saving tokens.
+
+**Three-tier strategy:**
+
+| Tier | Mechanism | Loading | Content |
+|------|-----------|---------|---------|
+| Root | `CLAUDE.md` at repo root | Eager | Repo-wide conventions, projects table, critical rules |
+| Project | `packages/api/CLAUDE.md` etc. | Lazy (on file access) | Stack, build/test commands, project conventions |
+| Global Rules | `.claude/rules/*.md` | Eager | Lessons learned, testing philosophy, security, git workflow |
+
+**Monorepo file structure:**
+
+```
+your-project/
+├── CLAUDE.md                  # Root — projects table + critical rules (eager)
+├── .claudeignore              # Files tracked by git but excluded from Claude's context
+├── packages/
+│   ├── api/
+│   │   └── CLAUDE.md          # Per-project — stack, build/test (lazy)
+│   └── web/
+│       └── CLAUDE.md          # Per-project — stack, build/test (lazy)
+├── .claude/
+│   ├── config.json            # ccflow configuration (includes isMonorepo + projects)
+│   ├── settings.json          # Sandbox, permissions, and allowed domains
+│   └── rules/
+│       ├── lessons-learned.md        # Repo-wide lessons (eager)
+│       ├── lessons-learned-api.md    # Per-project lessons (eager)
+│       ├── lessons-learned-web.md    # Per-project lessons (eager)
+│       └── <stack-rules>.md          # Stack-specific coding rules (eager)
+└── .worktrees/
+```
+
+Per-project lessons stay in `.claude/rules/` (eager) because lessons are the highest-value context — the token cost of a few extra KB is outweighed by preventing repeated mistakes across project boundaries.
+
+## Implementation Pipeline
+
+When you run `/ccflow:implement <ticket-id>`, the pipeline executes these phases:
+
+1. **Plan** — Planner agent analyzes the ticket and proposes an implementation plan (waits for your approval).
+2. **Worktree Setup** — Creates an isolated git worktree for the feature branch
+3. **Test First (Red)** — Implementer agent writes failing tests
+4. **Implement (Green)** — Implementer agent makes tests pass
+5. **Refactor** — Implementer agent simplifies and cleans up
+6. **Security Review** — Security reviewer agent checks for OWASP vulnerabilities
+7. **Code Review** — Code reviewer agent does a final PR-style review
+8. **Capture Lessons** — Lessons collector extracts mistakes into lessons-learned
+9. **Create PR** — Rebases on latest main, commits, pushes, and creates a pull request
+
+## Ticket Splitting
+
+When a ticket is sized M or L during `/ccflow:refine`, the skill suggests splitting it into numbered child tickets (e.g., "(1/3)", "(2/3)", "(3/3)") with explicit dependency ordering — which children can be implemented in parallel and which are sequential. Each child references the parent in its body and the parent tracks all children in a "Child Tickets" checklist with dependencies. When `/ccflow:implement` creates a PR for the last open child, it auto-closes the parent alongside the child.
+
+## Architecture
+
+The plugin uses specialized agents with isolated contexts:
+
+| Agent | Role | Model | Permission Mode |
+|-------|------|-------|-----------------|
+| **planner** | Analyzes tickets, produces implementation plans | inherit | plan (read-only) |
+| **implementer** | TDD: writes tests first, then implementation | inherit | acceptEdits |
+| **security-reviewer** | OWASP-focused security review | sonnet | plan (read-only) |
+| **code-reviewer** | PR-style quality review | sonnet | plan (read-only) |
+| **lessons-collector** | Extracts mistakes into lessons-learned | haiku | acceptEdits |
+
+External integrations use the `gh` CLI rather than MCP servers, keeping permissions simple and avoiding token overhead. Optional MCP servers: Context7 (live documentation lookup) and Pencil (design file creation via `/ccflow:design`).
+
+## Known Limitations
+
+- **SSH git remotes + sandbox**: The sandbox uses `allowedDomains` for network filtering, which works with HTTPS but not SSH. If you have an SSH remote (`git@github.com:...`), `git push` will fail inside the sandbox. **Recommended**: switch to HTTPS remotes (`git remote set-url origin https://github.com/<owner>/<repo>.git`), or push manually when prompted.
+- **New repos with no commits**: `git worktree add` requires at least one commit. The pipeline handles this automatically by creating an initial commit if needed.
+
+## Troubleshooting
+
+### `git push` fails inside sandbox
+The sandbox blocks SSH connections. Options:
+1. Switch to HTTPS: `git remote set-url origin https://github.com/<owner>/<repo>.git`
+2. Push manually when the pipeline prompts you
+3. Disable sandbox in `.claude/settings.json` (not recommended)
+
+### `git worktree add` fails with "not a valid reference"
+Your repo has no commits. The pipeline should handle this automatically. If it doesn't, create an initial commit: `git add -A && git commit -m "chore: initial commit" --allow-empty`
+
+### Sandbox permissions errors on Linux
+Ensure bubblewrap and socat are installed:
+```bash
+sudo apt install bubblewrap socat   # Debian/Ubuntu
+sudo pacman -S bubblewrap socat     # Arch
+```
+
+### GitHub CLI not authenticated
+Run `gh auth login` and follow the prompts. Verify with `gh auth status`.
+
+### Agent prompts for file edit permissions
+This should not happen with the default settings. Verify `.claude/settings.json` includes `Write(*)` and `Edit(*)` in `permissions.allow`. Running `/ccflow:implement` will auto-detect missing permissions and offer to fix them, or you can re-run `/ccflow:configure` to regenerate settings.
+
+## Project Structure
+
+```
+ccflow/
+├── .claude-plugin/
+│   └── plugin.json
+├── .mcp.json
+├── .lsp.json              # LSP server configuration (generated by configure)
+├── agents/
+│   ├── planner.md
+│   ├── implementer.md
+│   ├── security-reviewer.md
+│   ├── code-reviewer.md
+│   └── lessons-collector.md
+├── skills/
+│   ├── configure/SKILL.md
+│   ├── refine/SKILL.md
+│   ├── design/SKILL.md
+│   ├── sync/SKILL.md
+│   ├── implement/
+│   │   ├── SKILL.md
+│   │   └── phases/
+│   ├── address-review/SKILL.md
+│   ├── worktrees/SKILL.md
+│   ├── testing/SKILL.md
+│   ├── stack-dotnet/SKILL.md
+│   └── stack-angular/SKILL.md
+├── hooks/
+│   └── hooks.json
+├── templates/
+│   ├── claudeignore
+│   ├── claude-md-root.md
+│   ├── claude-md-root-monorepo.md
+│   ├── claude-md-project.md
+│   ├── settings.json
+│   └── rules/
+│       ├── lessons-learned.md
+│       └── lessons-learned-project.md
+└── README.md
+```

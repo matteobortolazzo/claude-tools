@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── Auto-detect container runtime ────────────────────────────────
+if command -v podman &>/dev/null; then
+    RUNTIME=podman
+elif command -v docker &>/dev/null; then
+    RUNTIME=docker
+else
+    echo "Error: neither podman nor docker found." >&2
+    exit 1
+fi
+
+# ── Configuration ────────────────────────────────────────────────
+IMAGE="claude-sandbox:latest"
+CONTAINER_PREFIX="claude-sand"
+WORKSPACE_HOST="${HOME}/Repos"
+WORKSPACE_CONTAINER="/workspace"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep,Agent,NotebookEdit,WebFetch,WebSearch"
+
+# ── Parse options ────────────────────────────────────────────────
+INSTANCE_NAME="default"
+BUILD_ONLY=false
+SHELL_ONLY=false
+CLAUDE_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --name)
+            INSTANCE_NAME="$2"
+            shift 2
+            ;;
+        --name=*)
+            INSTANCE_NAME="${1#*=}"
+            shift
+            ;;
+        --build)
+            BUILD_ONLY=true
+            shift
+            ;;
+        --shell)
+            SHELL_ONLY=true
+            shift
+            ;;
+        *)
+            CLAUDE_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+CONTAINER_NAME="${CONTAINER_PREFIX}-${INSTANCE_NAME}"
+VOLUME_NAME="${CONTAINER_PREFIX}-home-${INSTANCE_NAME}"
+
+# ── Build ────────────────────────────────────────────────────────
+build_image() {
+    echo "Building ${IMAGE} with ${RUNTIME}..."
+    "${RUNTIME}" build -t "${IMAGE}" "${SCRIPT_DIR}"
+    echo "Done."
+}
+
+if "${BUILD_ONLY}"; then
+    build_image
+    exit 0
+fi
+
+if ! "${RUNTIME}" image inspect "${IMAGE}" &>/dev/null; then
+    build_image
+fi
+
+# ── Resolve Claude binary ───────────────────────────────────────
+CLAUDE_BIN="$(readlink -f "$(which claude)" 2>/dev/null || true)"
+if [[ ! -x "${CLAUDE_BIN}" ]]; then
+    echo "Error: claude binary not found. Install Claude Code first." >&2
+    exit 1
+fi
+
+# ── Resolve muxwatch (optional) ─────────────────────────────────
+MUXWATCH_BIN="$(readlink -f "$(which muxwatch)" 2>/dev/null || true)"
+MUXWATCH_EVENTS_SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/muxwatch-events.sock"
+MUXWATCH_AVAILABLE=false
+
+if [[ -x "${MUXWATCH_BIN}" && -S "${MUXWATCH_EVENTS_SOCKET}" ]]; then
+    MUXWATCH_AVAILABLE=true
+fi
+
+# ── Build claude command args ────────────────────────────────────
+CLAUDE_CMD_ARGS=(--allowedTools "${ALLOWED_TOOLS}")
+
+# ── Attach to running container ─────────────────────────────────
+if "${RUNTIME}" ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
+    if "${SHELL_ONLY}"; then
+        echo "Attaching shell to running '${CONTAINER_NAME}'..."
+        "${RUNTIME}" exec -it "${CONTAINER_NAME}" /bin/bash
+    else
+        "${RUNTIME}" exec -it "${CONTAINER_NAME}" claude "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
+    fi
+    exit $?
+fi
+
+# Remove stopped container if it exists
+"${RUNTIME}" rm "${CONTAINER_NAME}" &>/dev/null || true
+
+# ── Resolve working directory ────────────────────────────────────
+if [[ "${PWD}" == "${WORKSPACE_HOST}"* ]]; then
+    WORKDIR="${WORKSPACE_CONTAINER}${PWD#"${WORKSPACE_HOST}"}"
+else
+    WORKDIR="${WORKSPACE_CONTAINER}"
+fi
+
+# ── Assemble run args ───────────────────────────────────────────
+RUN_ARGS=(
+    --name "${CONTAINER_NAME}"
+    --hostname "sandbox-${INSTANCE_NAME}"
+    -it --init --rm
+    --workdir "${WORKDIR}"
+
+    # Workspace
+    -v "${WORKSPACE_HOST}:${WORKSPACE_CONTAINER}"
+
+    # Persistent home
+    -v "${VOLUME_NAME}:/home/dev"
+
+    # Claude binary (read-only)
+    -v "${CLAUDE_BIN}:/usr/local/bin/claude:ro"
+
+    # Terminal
+    -e "TERM=${TERM:-xterm-256color}"
+)
+
+# Git config (read-only, if exists)
+for gitconfig in "${HOME}/.config/git/config" "${HOME}/.gitconfig"; do
+    if [[ -f "${gitconfig}" ]]; then
+        RUN_ARGS+=(-v "${gitconfig}:/home/dev/.gitconfig:ro")
+        break
+    fi
+done
+
+# Muxwatch (optional)
+if "${MUXWATCH_AVAILABLE}"; then
+    RUN_ARGS+=(
+        -v "${MUXWATCH_BIN}:/usr/local/bin/muxwatch:ro"
+        -v "${MUXWATCH_EVENTS_SOCKET}:/run/user/1000/muxwatch-events.sock"
+        -e "XDG_RUNTIME_DIR=/run/user/1000"
+        -e "TMUX_PANE=${TMUX_PANE:-}"
+    )
+fi
+
+[[ -n "${COLORTERM:-}" ]] && RUN_ARGS+=(-e "COLORTERM=${COLORTERM}")
+
+# ── Run ─────────────────────────────────────────────────────────
+if "${SHELL_ONLY}"; then
+    "${RUNTIME}" run "${RUN_ARGS[@]}" "${IMAGE}"
+else
+    "${RUNTIME}" run "${RUN_ARGS[@]}" "${IMAGE}" -c 'claude "$@"' _ "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
+fi

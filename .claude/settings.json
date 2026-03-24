@@ -1,0 +1,38 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker", "podman"],
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "proxy.golang.org",
+        "sum.golang.org"
+      ],
+      "allowLocalBinding": true
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Write(*)",
+      "Edit(*)",
+      "Bash(go *)",
+      "Bash(make *)",
+      "Bash(golangci-lint *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "mcp__plugin_ccflow_context7__resolve-library-id",
+      "mcp__plugin_ccflow_context7__query-docs"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}

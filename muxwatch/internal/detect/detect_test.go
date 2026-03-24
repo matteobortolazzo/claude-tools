@@ -1,0 +1,85 @@
+package detect
+
+import "testing"
+
+func TestTaskName(t *testing.T) {
+	tests := []struct {
+		title string
+		want  string
+	}{
+		{"⠋ writing tests", "writing tests"},
+		{"✳ fixing auth bug", "fixing auth bug"},
+		{"✶ reading files", "reading files"},
+		{"plain title", "lain title"}, // no status prefix, strips first rune
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := TaskName(tt.title)
+		if got != tt.want {
+			t.Errorf("TaskName(%q) = %q, want %q", tt.title, got, tt.want)
+		}
+	}
+}
+
+func TestIsStatusSymbol(t *testing.T) {
+	tests := []struct {
+		r    rune
+		want bool
+	}{
+		{'⠋', true},  // braille
+		{'⠙', true},  // braille
+		{'✶', true},  // six-pointed star
+		{'✻', true},  // teardrop star
+		{'✳', true},  // idle marker
+		{'a', false},  // regular char
+		{'!', false},  // punctuation
+		{'~', false},  // tilde
+	}
+	for _, tt := range tests {
+		got := IsStatusSymbol(tt.r)
+		if got != tt.want {
+			t.Errorf("IsStatusSymbol(%q) = %v, want %v", tt.r, got, tt.want)
+		}
+	}
+}
+
+func TestIsBraille(t *testing.T) {
+	tests := []struct {
+		r    rune
+		want bool
+	}{
+		{0x2800, true},  // first braille character (⠀)
+		{0x28FF, true},  // last braille character
+		{0x2850, true},  // mid-range braille
+		{'⠋', true},     // common spinner character
+		{0x27FF, false}, // just below braille range
+		{0x2900, false}, // just above braille range
+		{'✶', false},    // star marker (not braille)
+		{'a', false},    // regular ASCII
+	}
+	for _, tt := range tests {
+		got := IsBraille(tt.r)
+		if got != tt.want {
+			t.Errorf("IsBraille(%U) = %v, want %v", tt.r, got, tt.want)
+		}
+	}
+}
+
+func TestStatusString(t *testing.T) {
+	tests := []struct {
+		s    Status
+		want string
+	}{
+		{StatusUnknown, "unknown"},
+		{StatusIdle, "idle"},
+		{StatusDone, "done"},
+		{StatusStopped, "stopped"},
+		{StatusRunning, "running"},
+		{StatusNeedInput, "need-input"},
+	}
+	for _, tt := range tests {
+		if got := tt.s.String(); got != tt.want {
+			t.Errorf("Status(%d).String() = %q, want %q", tt.s, got, tt.want)
+		}
+	}
+}

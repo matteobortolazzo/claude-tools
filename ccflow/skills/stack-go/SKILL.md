@@ -1,0 +1,91 @@
+---
+name: stack-go
+description: Go backend conventions, patterns, and test infrastructure. Use when working with Go files, go.mod projects, Go modules, Go CLI, go build, go test, BubbleTea TUI apps, Lip Gloss styling, Charm libraries, goroutines, channels, interfaces, or Go dependency management.
+user-invocable: false
+---
+
+## Documentation Lookup
+
+**CRITICAL**: Never read Go module cache source files to learn library APIs. This includes:
+- `$GOMODCACHE/...` paths
+- `/tmp/*/gomodcache/...` paths
+- Any path containing `@v` version suffixes (e.g., `pkg@v1.2.3/`)
+- `vendor/` directories
+
+Instead, **always use Context7** (`resolve-library-id` + `query-docs`) to look up Go library documentation. This produces accurate, up-to-date API information without polluting context with raw source code.
+
+## Sandbox Environment
+
+Go commands require environment variables for every Bash call (they don't persist between calls):
+
+```bash
+GOPATH=$TMPDIR/gopath GOCACHE=$TMPDIR/gocache GOMODCACHE=$TMPDIR/gomodcache go <command>
+```
+
+This prefix is required on **every** `go` invocation — `go build`, `go test`, `go mod tidy`, `go get`, etc. There is no way to set these once; accept the repetition.
+
+## Integration Tests
+
+Go tests use table-driven patterns with subtests:
+
+```go
+func TestMyFunction(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    string
+        expected string
+        wantErr  bool
+    }{
+        {name: "valid input", input: "hello", expected: "HELLO"},
+        {name: "empty input", input: "", expected: ""},
+        {name: "error case", input: "bad", wantErr: true},
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := MyFunction(tt.input)
+            if tt.wantErr {
+                if err == nil {
+                    t.Fatal("expected error, got nil")
+                }
+                return
+            }
+            if err != nil {
+                t.Fatalf("unexpected error: %v", err)
+            }
+            if got != tt.expected {
+                t.Errorf("got %q, want %q", got, tt.expected)
+            }
+        })
+    }
+}
+```
+
+## Build & Test Commands
+
+```bash
+GOPATH=$TMPDIR/gopath GOCACHE=$TMPDIR/gocache GOMODCACHE=$TMPDIR/gomodcache go build ./...
+GOPATH=$TMPDIR/gopath GOCACHE=$TMPDIR/gocache GOMODCACHE=$TMPDIR/gomodcache go test ./...
+```
+
+## BubbleTea Rules
+
+When working with BubbleTea (`github.com/charmbracelet/bubbletea`) TUI apps:
+
+- **Never discard `tea.Cmd`**: Every `Update` method returns `(tea.Model, tea.Cmd)`. Always propagate the `tea.Cmd` — dropping it silently breaks async operations (timers, I/O, sub-commands).
+- **Use `lipgloss.Width()` for string width**: Never use `len()` for display width calculations — it counts bytes, not visual columns. Use `lipgloss.Width()` which handles ANSI escape codes and wide characters.
+- **Async test commands**: When testing `tea.Cmd` functions that run goroutines, use a timeout pattern:
+  ```go
+  cmd := model.Init() // or from Update
+  done := make(chan tea.Msg, 1)
+  go func() { done <- cmd() }()
+  select {
+  case msg := <-done:
+      // assert on msg
+  case <-time.After(2 * time.Second):
+      t.Fatal("command timed out")
+  }
+  ```
+- **Model updates are pure**: `Update` should return a new model, not mutate in place. If the model is a pointer receiver, be explicit about what changes.
+
+Read `.claude/rules/` for project-specific Go conventions (if they exist).
