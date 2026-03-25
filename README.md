@@ -35,8 +35,9 @@ go install github.com/matteobortolazzo/claude-tools/muxwatch@latest
 Docker/Podman container for running Claude Code in isolation. Includes .NET, Node.js, Go, and common dev tools.
 
 ```bash
-./dev-sandbox/claude-sand --build  # Build image
-./dev-sandbox/claude-sand          # Launch Claude Code in container
+ln -s "$(pwd)/dev-sandbox/claude-sand" ~/.local/bin/claude-sand
+claude-sand --build  # Build image
+claude-sand          # Launch Claude Code in container
 ```
 
 ## License
