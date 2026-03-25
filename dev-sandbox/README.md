@@ -36,6 +36,9 @@ claude-sand --name myproject
 
 # Rebuild the image (after changing Dockerfile or SDK versions)
 claude-sand --build
+
+# Use host networking for manual OAuth (browser callback)
+claude-sand --host-network --shell
 ```
 
 The container starts in the directory matching your host `$PWD` (mapped through `~/Repos` → `/workspace`).
@@ -44,7 +47,9 @@ If a container with the same name is already running, the script attaches to it 
 
 ## First-Run Setup
 
-On first launch, open a shell and set up your environment:
+If `~/.claude/.credentials.json` and `~/.config/gh/hosts.yml` exist on the host, they are automatically injected into the container on each start. **No manual auth needed.**
+
+If host credentials are not available, open a shell for manual setup:
 
 ```bash
 claude-sand --shell
@@ -53,6 +58,13 @@ claude-sand --shell
 gh auth login              # GitHub CLI auth
 claude                     # Claude Code auth (first launch)
 claude plugin install ...  # Install any plugins you need
+```
+
+For OAuth flows that require a browser callback, use host network mode:
+
+```bash
+claude-sand --host-network --shell
+# Inside the container, run: claude
 ```
 
 Everything persists in the home volume — only needs to happen once per instance.
@@ -103,6 +115,8 @@ docker build --build-arg DOTNET_SDK_VERSION=10.0.200 \
 |-----------|---------------|---------|
 | Claude binary | `/usr/local/bin/claude` | Always matches host version |
 | `~/.config/git/config` or `~/.gitconfig` | `/home/dev/.gitconfig` | Git identity |
+| `~/.claude/.credentials.json` | `/tmp/host-claude-creds/` (staging) | Claude OAuth tokens (copied to home on start) |
+| `~/.config/gh/hosts.yml` | `/tmp/host-gh-config/` (staging) | GitHub CLI tokens (copied to home on start) |
 
 ### Muxwatch (optional)
 
@@ -190,3 +204,8 @@ Ensure `claude` is in your host PATH. Check with: `readlink -f "$(which claude)"
 
 **Container runtime**
 The script auto-detects `podman` first, then falls back to `docker`.
+
+**Claude Code says "request not found" during OAuth**
+The OAuth callback can't reach the container. Either:
+1. Ensure `~/.claude/.credentials.json` exists on the host (run `claude` on the host first to authenticate), or
+2. Use `claude-sand --host-network --shell` and run `claude` to complete the OAuth flow with host networking.

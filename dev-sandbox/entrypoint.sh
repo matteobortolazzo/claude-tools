@@ -8,4 +8,20 @@ if [[ ! -f /home/dev/.bashrc ]]; then
     echo 'alias ll="ls -la --color=auto"' >> /home/dev/.bashrc
 fi
 
+# ── Inject host credentials (staged read-only mounts → writable copies) ──
+
+# Claude Code OAuth credentials
+if [[ -f /tmp/host-claude-creds/.credentials.json ]]; then
+    mkdir -p /home/dev/.claude
+    cp /tmp/host-claude-creds/.credentials.json /home/dev/.claude/.credentials.json
+    chmod 600 /home/dev/.claude/.credentials.json
+fi
+
+# GitHub CLI credentials
+if [[ -f /tmp/host-gh-config/hosts.yml ]]; then
+    mkdir -p /home/dev/.config/gh
+    cp /tmp/host-gh-config/hosts.yml /home/dev/.config/gh/hosts.yml
+    chmod 600 /home/dev/.config/gh/hosts.yml
+fi
+
 exec /bin/bash "$@"

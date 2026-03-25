@@ -23,6 +23,7 @@ ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep,Agent,NotebookEdit,WebFetch,WebSea
 INSTANCE_NAME="default"
 BUILD_ONLY=false
 SHELL_ONLY=false
+HOST_NETWORK=false
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -41,6 +42,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --shell)
             SHELL_ONLY=true
+            shift
+            ;;
+        --host-network)
+            HOST_NETWORK=true
             shift
             ;;
         *)
@@ -145,6 +150,23 @@ if "${MUXWATCH_AVAILABLE}"; then
         -e "XDG_RUNTIME_DIR=/run/user/1000"
         -e "TMUX_PANE=${TMUX_PANE:-}"
     )
+fi
+
+# Claude credentials (read-only staging — entrypoint copies to /home/dev)
+CLAUDE_CREDS="${HOME}/.claude/.credentials.json"
+if [[ -f "${CLAUDE_CREDS}" ]]; then
+    RUN_ARGS+=(-v "${CLAUDE_CREDS}:/tmp/host-claude-creds/.credentials.json:ro")
+fi
+
+# GitHub CLI credentials (read-only staging — entrypoint copies to /home/dev)
+GH_HOSTS="${HOME}/.config/gh/hosts.yml"
+if [[ -f "${GH_HOSTS}" ]]; then
+    RUN_ARGS+=(-v "${GH_HOSTS}:/tmp/host-gh-config/hosts.yml:ro")
+fi
+
+# Host network mode (fallback for manual OAuth inside container)
+if "${HOST_NETWORK}"; then
+    RUN_ARGS+=(--network host)
 fi
 
 [[ -n "${COLORTERM:-}" ]] && RUN_ARGS+=(-e "COLORTERM=${COLORTERM}")
