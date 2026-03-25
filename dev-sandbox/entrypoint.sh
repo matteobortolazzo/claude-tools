@@ -1,4 +1,7 @@
 #!/bin/bash
+# Ensure hostname resolves (suppresses sudo warnings)
+sudo sh -c 'grep -q "$(hostname)" /etc/hosts || echo "127.0.0.1 $(hostname)" >> /etc/hosts'
+
 # Fix home directory ownership (volume may be root-owned on first run)
 sudo chown dev:dev /home/dev
 
@@ -6,6 +9,23 @@ sudo chown dev:dev /home/dev
 if [[ ! -f /home/dev/.bashrc ]]; then
     echo 'export PS1="[\[\e[36m\]sandbox\[\e[0m\]:\[\e[33m\]\w\[\e[0m\]] $ "' >> /home/dev/.bashrc
     echo 'alias ll="ls -la --color=auto"' >> /home/dev/.bashrc
+fi
+
+# ── Ensure .claude directory and settings exist ───────────────────
+# The home volume may retain stale symlinks from previous runs where
+# Claude Code pointed these paths at the host filesystem.  Replace any
+# dangling symlink with a real directory / file so plugin installs work.
+
+if [[ -L /home/dev/.claude ]]; then
+    rm -f /home/dev/.claude
+fi
+mkdir -p /home/dev/.claude
+
+if [[ -L /home/dev/.claude/settings.json ]]; then
+    rm -f /home/dev/.claude/settings.json
+fi
+if [[ ! -f /home/dev/.claude/settings.json ]]; then
+    echo '{}' > /home/dev/.claude/settings.json
 fi
 
 # ── Inject host credentials (staged read-only mounts → writable copies) ──
