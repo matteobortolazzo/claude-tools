@@ -6,6 +6,8 @@ Monorepo with <N> projects. <ticket-system> for tracking. <pr-system> for PRs.
 - ALWAYS read the CLAUDE.md in the project directory you are working in.
 - Read `.claude/rules/` files for repo-wide conventions.
 - Test-first: integration tests that assert behavior, not implementation details.
+- No secrets, credentials, or API keys in code.
+- No PII or stack traces in user-facing error responses.
 - Keep tickets well-scoped. 1 ticket = 1 PR.
 - Use git worktrees for all feature work. Never modify code in main worktree.
 
@@ -29,4 +31,4 @@ Each frontend project has its own design directory. See per-project CLAUDE.md fo
 ## Rule Files
 See `.claude/rules/` for conventions:
 - `lessons-learned.md` — real mistakes from this codebase (authoritative)
-- Other rule files as created by the team
+- `git-workflow.md` — branching, commits, PRs, versioning

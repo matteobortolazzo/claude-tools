@@ -103,10 +103,10 @@ After writing all entries, output a summary of what went where:
 ## Lessons Collected
 
 ### Routed to rule files
-- `.claude/rules/security.md`: "Cache keys for tenant-scoped data must include all tenant identifiers"
+- `.claude/rules/git-workflow.md`: "Always create feature branch from latest main, not from stale local"
 
 ### New rule files created
-- `.claude/rules/angular-zoneless.md` (3 rules)
+- `.claude/rules/caching.md` (2 rules)
 
 ### Added to lessons-learned
 - `.claude/rules/lessons-learned.md`: "Always grep all consumers when changing a config value's format"

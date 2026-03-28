@@ -88,4 +88,9 @@ When working with BubbleTea (`github.com/charmbracelet/bubbletea`) TUI apps:
   ```
 - **Model updates are pure**: `Update` should return a new model, not mutate in place. If the model is a pointer receiver, be explicit about what changes.
 
+## Security
+- Use parameterized queries with `database/sql` placeholder syntax (`$1`, `?`) — never string concatenation for SQL
+- Use `html/template` (not `text/template`) for HTML output — it auto-escapes
+- Validate and sanitize all user input at handler boundaries
+
 Read `.claude/rules/` for project-specific Go conventions (if they exist).

@@ -134,4 +134,9 @@ describe('OrderTableComponent', () => {
 });
 ```
 
+## Security
+- Trust Angular's built-in XSS protection — do not bypass with `bypassSecurityTrust*` unless absolutely necessary and reviewed
+- Use `HttpClient` which includes XSRF protection by default
+- Sanitize user input displayed via `[innerHTML]` using `DomSanitizer`
+
 Read `.claude/rules/` for project-specific Angular conventions (if they exist).
