@@ -349,8 +349,10 @@ After gathering answers:
 
    Omit the `args` field if the catalog entry has an empty array `[]`.
 
-2. Create `.claude/rules/` directory with relevant rule files from `${CLAUDE_PLUGIN_ROOT}/templates/rules/`
-3. Create `.claude/rules/lessons-learned.md` from `${CLAUDE_PLUGIN_ROOT}/templates/rules/lessons-learned.md`
+2. Create `.claude/rules/` directory with these rule files from `${CLAUDE_PLUGIN_ROOT}/templates/rules/`:
+   - `git-workflow.md` — branching, commit format, PR workflow
+   - `lessons-learned.md` — mistake tracking (always deployed)
+   Do NOT deploy `testing.md` or `security.md` — testing rules load on-demand via the `testing` skill, and security rules are distributed across root CLAUDE.md (universal), per-project CLAUDE.md (stack-specific), and stack skills.
 
 **Monorepo-only additional files:**
 

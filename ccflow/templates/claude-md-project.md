@@ -15,6 +15,17 @@
 ## Conventions
 - <project-specific rules populated during configure>
 
+<!-- IF backend/API project -->
+## Security
+- Parameterized queries (or ORM) for all database access
+- Input validation on all endpoints
+- Authorization checks on all endpoints
+<!-- END IF -->
+<!-- IF frontend project -->
+## Security
+- Sanitize user input before rendering
+<!-- END IF -->
+
 <!-- IF pencil.enabled AND project has designPath -->
 ## Design
 - Design spec: `<designPath>/DESIGN.md` — screens, components, tokens for this project

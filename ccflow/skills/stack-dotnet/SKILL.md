@@ -41,4 +41,10 @@ dotnet build
 dotnet test
 ```
 
+## Security
+- Use parameterized queries or Entity Framework — never raw SQL string concatenation
+- Apply `[Authorize]` attributes on all non-public endpoints
+- Validate all model inputs with data annotations or FluentValidation
+- No secrets in `appsettings.json` committed to source control — use User Secrets or environment variables
+
 Read `.claude/rules/` for project-specific .NET conventions (if they exist).

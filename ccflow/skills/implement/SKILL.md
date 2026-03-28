@@ -17,7 +17,7 @@ Read the `subagent-safety` reference skill before delegating work to subagents.
 Read `.claude/config.json`.
 Read the `claudeMdLocation` field from `.claude/config.json` to determine where `CLAUDE.md` is located (defaults to `.claude/CLAUDE.md` if not set).
 Read `.claude/rules/lessons-learned.md` before any implementation.
-Read relevant `.claude/rules/*.md` files based on the work involved.
+Read `.claude/rules/git-workflow.md` for commit and PR conventions.
 
 ### Monorepo Context Loading
 
