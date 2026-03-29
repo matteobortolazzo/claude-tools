@@ -176,9 +176,11 @@ Options (multiSelect=true): "Empty state", "Populated / default", "Error state",
 
 Options: "Desktop only", "Desktop + Mobile", "Desktop + Tablet + Mobile"
 
-## Phase 2.5 — Worktree Setup
+## Phase 2.5 — Branch Setup
 
-After all design questions are answered, create a git worktree before any file creation or modification.
+After all design questions are answered, create a feature branch before any file creation or modification.
+
+**Why not a worktree?** Pencil resolves file paths within its editor. Worktree paths (`.worktrees/<name>/...`) can cause issues with saves, autosaves, and MCP file operations. The design skill works directly in the main worktree on a feature branch instead.
 
 ### Step 2.5A: Ensure HEAD exists
 
@@ -190,48 +192,37 @@ If this fails (no commits exist), create an initial commit:
 git add -A && git commit -m "chore: initial commit" --allow-empty
 ```
 
-### Step 2.5B: Create worktree
+### Step 2.5B: Create feature branch
 
 - **If ticket mode:**
   ```bash
-  git worktree add .worktrees/<ticket-id>-design -b feature/<ticket-id>-design
+  git checkout -b feature/<ticket-id>-design
   ```
 - **If ticketless mode:** Derive a slug from the design description (lowercase, hyphens, max 30 chars):
   ```bash
-  git worktree add .worktrees/<auto-slug>-design -b feature/<auto-slug>-design
+  git checkout -b feature/<auto-slug>-design
   ```
 
-Store the worktree path (e.g., `.worktrees/<id>-design`) as `$WORKTREE_PATH` for all subsequent phases.
-
-### Step 2.5C: Prepare design directory in worktree
+### Step 2.5C: Prepare design directory
 
 ```bash
-mkdir -p $WORKTREE_PATH/<designPath>
+mkdir -p <designPath>
 ```
-
-### Step 2.5D: Copy existing design system file (if applicable)
-
-If a design system `.pen` file was selected in Phase 2, copy it into the worktree so Pencil opens the worktree copy:
-```bash
-cp <original-pen-file-path> $WORKTREE_PATH/<designPath>/
-```
-
-All subsequent phases operate on files inside `$WORKTREE_PATH`.
 
 ## Phase 3 — Design Creation
 
-Now create the design using Pencil tools. **All file paths in this phase must be absolute paths inside the worktree** (`$WORKTREE_PATH`).
+Now create the design using Pencil tools. **All file paths in this phase must be absolute paths** within the repository root.
 
 ### Step 3A: Open or Create `.pen` File
 
 First, call `get_editor_state(include_schema: false)` and update `$PENCIL_OPEN_DOC` from the response (the document may have changed since Phase 0.5, e.g., user switched files during Phase 2).
 
 **If `$PENCIL_OPEN_DOC` is empty** (no document currently open):
-- If a design system `.pen` file was copied to the worktree in Phase 2.5 → call `open_document` with the **absolute path** of the worktree copy (e.g., `<repo-root>/$WORKTREE_PATH/<designPath>/<file>.pen`). Use `get_editor_state` to confirm.
-- If designing from scratch → call `open_document` with `"new"` to create a new empty document. After creation, the file will be saved to the worktree's `designPath`.
+- If a design system `.pen` file was selected in Phase 2 → call `open_document` with the **absolute path** of the `.pen` file (e.g., `<repo-root>/<designPath>/<file>.pen`). Use `get_editor_state` to confirm.
+- If designing from scratch → call `open_document` with `"new"` to create a new empty document. After creation, the file will be saved to `<designPath>`.
 
 **If `$PENCIL_OPEN_DOC` is set** (a document is already open):
-- Determine the **target file**: the worktree copy path (if a design system file was copied) or `"new"` (if designing from scratch).
+- Determine the **target file**: the design system `.pen` file path or `"new"` (if designing from scratch).
 - If `$PENCIL_OPEN_DOC` already matches the target file path → no action needed, proceed.
 - Otherwise → do **NOT** call `open_document` (calling it with an editor already open spawns a new Pencil instance and disconnects the MCP server). Ask the user via `AskUserQuestion`:
   > "Pencil already has `<$PENCIL_OPEN_DOC>` open. I need to open `<target file or 'a new document'>` instead. Please close the current file in Pencil (File → Close) or switch to the target file (File → Open), then confirm here."
@@ -242,7 +233,7 @@ First, call `get_editor_state(include_schema: false)` and update `$PENCIL_OPEN_D
     - If the wrong file is still open → ask again (loop once, then stop with an error if still wrong).
   - If **"Cancel design"** → **Stop.**
 
-**Important**: Pass the explicit `filePath` parameter pointing into the worktree for all subsequent Pencil MCP tool calls (`batch_get`, `batch_design`, `get_screenshot`, `snapshot_layout`, `get_variables`, `set_variables`, etc.).
+**Important**: Pass the explicit `filePath` parameter pointing into the repository for all subsequent Pencil MCP tool calls (`batch_get`, `batch_design`, `get_screenshot`, `snapshot_layout`, `get_variables`, `set_variables`, etc.).
 
 ### Step 3B: Get Editor State
 
@@ -346,9 +337,9 @@ Use the template at `${CLAUDE_PLUGIN_ROOT}/templates/design-spec.md` as the base
 - Replace `<pen-file-name>` with the actual `.pen` file name
 - Replace `<framework>` and select the matching Components table variant
 - Populate Screens, Components, Annotations, and Design Tokens tables with extracted data
-- Write the completed file to `$WORKTREE_PATH/<designPath>/DESIGN.md`
+- Write the completed file to `<designPath>/DESIGN.md`
 
-**If `DESIGN.md` already exists** at that path in the worktree, ask the user via `AskUserQuestion`:
+**If `DESIGN.md` already exists** at that path, ask the user via `AskUserQuestion`:
 > "A DESIGN.md already exists at `<designPath>/DESIGN.md`. What should I do?"
 
 Options: "Overwrite with new spec", "Merge (add new entries, keep existing)"
@@ -403,17 +394,17 @@ After Phase 5 reporting is complete, create a pull request containing the design
 For each screen/component designed:
 
 1. Call `get_screenshot` on the screen's node ID to capture a visual snapshot
-2. Attempt to save the screenshot to the worktree:
+2. Attempt to save the screenshot:
    ```bash
-   mkdir -p $WORKTREE_PATH/<designPath>/screenshots
+   mkdir -p <designPath>/screenshots
    ```
 3. If `get_screenshot` returns a file path → copy it:
    ```bash
-   cp <screenshot-path> $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
+   cp <screenshot-path> <designPath>/screenshots/<screen-name>.png
    ```
 4. If `get_screenshot` returns base64 image data → decode it:
    ```bash
-   echo '<base64-data>' | base64 -d > $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
+   echo '<base64-data>' | base64 -d > <designPath>/screenshots/<screen-name>.png
    ```
 5. If screenshots cannot be saved to files (neither path nor base64 available), prepare textual descriptions of each screen for the PR body instead
 
@@ -421,10 +412,10 @@ For each screen, write a brief textual description (2–3 sentences) covering la
 
 ### Step 6B: Commit
 
-Stage and commit all design artifacts inside the worktree:
+Stage and commit all design artifacts:
 
 ```bash
-cd $WORKTREE_PATH && git add -A && git commit -m "feat(design): <description>"
+git add <designPath>/ && git commit -m "feat(design): <description>"
 ```
 
 - **If ticket mode:** Include ticket ref in the commit body: `#<ticket-id>`
@@ -435,7 +426,7 @@ cd $WORKTREE_PATH && git add -A && git commit -m "feat(design): <description>"
 Push the branch to the remote:
 
 ```bash
-cd $WORKTREE_PATH && git push -u origin feature/<branch-name>
+git push -u origin feature/<branch-name>
 ```
 
 **If push fails** (sandbox network restriction or auth issue):
@@ -501,9 +492,14 @@ gh issue edit <number> --repo <owner>/<repo> --add-label "Designed" --remove-lab
 
 - **Push fails** → Display command, ask user to push manually (covered in Step 6C)
 - **PR creation fails** → Retry once. If it fails again, display the `gh pr create` command for the user to run manually
-- **Worktree already exists** → Ask via `AskUserQuestion`: "A worktree already exists at `.worktrees/<name>`. Reuse it or recreate?" Options: "Reuse existing", "Delete and recreate"
+- **Branch already exists** → Ask via `AskUserQuestion`: "Branch `feature/<name>` already exists. Reuse it or recreate?" Options: "Reuse existing (checkout)", "Delete and recreate"
 
 ## After PR
+
+Switch back to `main`:
+```bash
+git checkout main
+```
 
 Report the PR URL to the user. Then **STOP.** Do not:
 - Enter plan mode or propose an implementation plan
