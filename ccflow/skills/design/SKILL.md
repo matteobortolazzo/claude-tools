@@ -35,7 +35,7 @@ Read `pencil.mode` from `.claude/config.json` (default: `"editor"` if not presen
 **Editor mode** (`pencil.mode` is `"editor"` or absent):
 
 1. Call `get_editor_state(include_schema: false)` as a connectivity probe.
-2. **If the call succeeds** → Pencil MCP is available. Proceed to argument parsing.
+2. **If the call succeeds** → Pencil MCP is available. Check the response for the currently active document file path and store it as `$PENCIL_OPEN_DOC` (set to the file path string if a document is open, or empty if no document is open). Proceed to argument parsing.
 3. **If the call fails** → attempt auto-launch:
    a. Run `which pencil 2>/dev/null` to check if the Pencil CLI is installed.
    b. **If CLI found**: Run `pencil &` to launch Pencil in the background, then retry `get_editor_state(include_schema: false)` up to 3 times with 3-second pauses between attempts.
@@ -148,7 +148,13 @@ Then:
   > "Found N design files. Which should I use as the design system (or start fresh)?"
   Options: one per `.pen` file path, plus "Start fresh (no design system)"
 
-If using an existing `.pen` file, open it with `open_document` and read its reusable components with `batch_get` using `{reusable: true}` to understand what's available.
+If using an existing `.pen` file:
+- **If `$PENCIL_OPEN_DOC` is empty** (no document currently open) → call `open_document` with the `.pen` file path, then read its reusable components with `batch_get` using `{reusable: true}` to understand what's available.
+- **If `$PENCIL_OPEN_DOC` is set** (a document is already open) → do **NOT** call `open_document` (calling it with an editor already open spawns a new Pencil instance and disconnects the MCP server). Instead, ask the user via `AskUserQuestion`:
+  > "Pencil already has `<$PENCIL_OPEN_DOC>` open. Please switch to `<target .pen file>` in Pencil (File → Open), then confirm here."
+  Options: "Done, file is open", "Cancel"
+  - If **"Done"** → call `get_editor_state(include_schema: false)` to confirm the correct file is now open and update `$PENCIL_OPEN_DOC`. Then read its reusable components with `batch_get` using `{reusable: true}`.
+  - If **"Cancel"** → skip design system loading and proceed as if designing from scratch.
 
 **Question 3 — Visual direction:**
 
@@ -218,8 +224,23 @@ Now create the design using Pencil tools. **All file paths in this phase must be
 
 ### Step 3A: Open or Create `.pen` File
 
+First, call `get_editor_state(include_schema: false)` and update `$PENCIL_OPEN_DOC` from the response (the document may have changed since Phase 0.5, e.g., user switched files during Phase 2).
+
+**If `$PENCIL_OPEN_DOC` is empty** (no document currently open):
 - If a design system `.pen` file was copied to the worktree in Phase 2.5 → call `open_document` with the **absolute path** of the worktree copy (e.g., `<repo-root>/$WORKTREE_PATH/<designPath>/<file>.pen`). Use `get_editor_state` to confirm.
 - If designing from scratch → call `open_document` with `"new"` to create a new empty document. After creation, the file will be saved to the worktree's `designPath`.
+
+**If `$PENCIL_OPEN_DOC` is set** (a document is already open):
+- Determine the **target file**: the worktree copy path (if a design system file was copied) or `"new"` (if designing from scratch).
+- If `$PENCIL_OPEN_DOC` already matches the target file path → no action needed, proceed.
+- Otherwise → do **NOT** call `open_document` (calling it with an editor already open spawns a new Pencil instance and disconnects the MCP server). Ask the user via `AskUserQuestion`:
+  > "Pencil already has `<$PENCIL_OPEN_DOC>` open. I need to open `<target file or 'a new document'>` instead. Please close the current file in Pencil (File → Close) or switch to the target file (File → Open), then confirm here."
+  Options: "Done, ready to proceed", "Cancel design"
+  - If **"Done"** → call `get_editor_state(include_schema: false)` to verify. Update `$PENCIL_OPEN_DOC`.
+    - If the user closed the file (no document open) → now safe to call `open_document` with the target path or `"new"`.
+    - If the user opened the correct target file → proceed without calling `open_document`.
+    - If the wrong file is still open → ask again (loop once, then stop with an error if still wrong).
+  - If **"Cancel design"** → **Stop.**
 
 **Important**: Pass the explicit `filePath` parameter pointing into the worktree for all subsequent Pencil MCP tool calls (`batch_get`, `batch_design`, `get_screenshot`, `snapshot_layout`, `get_variables`, `set_variables`, etc.).
 
