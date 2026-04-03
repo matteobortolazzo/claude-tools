@@ -190,13 +190,15 @@ If no frontend framework is detected, skip this section entirely (do not set `pe
    **If Yes AND single project** (or monorepo with only one frontend project):
    - `pencil.designPath = "designs/"`, `pencil.shared` is omitted
 
-   **After the user confirms Yes** (regardless of monorepo choice), detect the Pencil CLI:
+   **After the user confirms Yes** (regardless of monorepo choice), detect `pencil interactive` support:
 
-   Run `which pencil 2>/dev/null`:
-   - **Found** → inform the user: "Pencil CLI detected at `<path>`. The design skill will auto-launch Pencil when needed."
-   - **Not found** → inform the user: "Pencil CLI not found. For auto-launch support, install it from within Pencil (File → Install `pencil` command into PATH). Otherwise, you'll need to open Pencil manually before running `/ccflow:design`."
-
-   Write `pencil.mode: "editor"` to the config. (Future: offer `"headless"` when the headless npm package is available.)
+   Run `pencil interactive --help 2>/dev/null` and check the exit code:
+   - **Succeeds (exit 0)** → Write `pencil.mode: "cli-app"` to the config. Inform the user:
+     "Pencil `interactive` mode detected. Design skills will use `pencil interactive` to communicate with the Pencil editor — this is more token-efficient than the MCP server.
+     For maximum token savings, you can disable the Pencil MCP server in your editor settings (Pencil → Preferences → MCP Server). ccflow uses the CLI directly and does not need the MCP server."
+   - **Fails or not found** → Write `pencil.mode: "editor"` to the config. Inform the user:
+     "Pencil `interactive` mode not available. Design skills will use the Pencil MCP server (requires the MCP connection to be active in your editor).
+     For better token efficiency, install the `pencil` command from within the Pencil app (File → Install `pencil` command into PATH) and re-run `/ccflow:configure` — this switches to `cli-app` mode which avoids loading MCP tool schemas into every conversation."
 
 ### Playwright CLI Setup
 
