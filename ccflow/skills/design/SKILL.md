@@ -4,7 +4,7 @@ description: Interactive design reasoning and .pen file creation using Pencil
 argument-hint: <ticket-id | design description> [additional context]
 user-invocable: true
 disable-model-invocation: true
-allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, WebFetch, mcp__pencil__get_editor_state, mcp__pencil__get_guidelines, mcp__pencil__get_style_guide_tags, mcp__pencil__get_style_guide, mcp__pencil__batch_get, mcp__pencil__batch_design, mcp__pencil__get_screenshot, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__snapshot_layout, mcp__pencil__open_document, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__replace_all_matching_properties, mcp__pencil__search_all_unique_properties
+allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, WebFetch, mcp__pencil__get_editor_state, mcp__pencil__get_guidelines, mcp__pencil__batch_get, mcp__pencil__batch_design, mcp__pencil__get_screenshot, mcp__pencil__export_nodes, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__snapshot_layout, mcp__pencil__open_document, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__replace_all_matching_properties, mcp__pencil__search_all_unique_properties
 ---
 
 <!-- Architecture note: ccflow orchestrates Pencil via `pencil interactive` CLI (ccflow-driven model).
@@ -143,6 +143,7 @@ Based on the ticket description (or design description in ticketless mode), clas
 | **dashboard** | Analytics dashboard, admin panel |
 | **landing-page** | Marketing page, product page, hero section |
 | **form/wizard** | Multi-step form, signup wizard, onboarding |
+| **slides/presentation** | Pitch deck, project update, onboarding slides |
 
 ### Step 2B: Retrieve Pencil Guidelines
 
@@ -153,12 +154,13 @@ Call `get_guidelines` with the topic most relevant to the classification:
 | landing-page | `landing-page` |
 | dashboard, screen/page, form/wizard | `design-system` |
 | component | `design-system` |
+| slides/presentation | `slides` |
 
 ### Step 2C: Get Style Inspiration
 
-1. Call `get_style_guide_tags` to retrieve all available tags
-2. Select 5–10 tags that best match the design task
-3. Call `get_style_guide` with the selected tags
+1. Call `get_guidelines({ category: "style" })` to list available styles
+2. Select the style that best matches the design task based on classification and context
+3. Call `get_guidelines({ category: "style", name: "<selected-style>" })` to load the full style definition (pass any required `params` if the style requests them)
 
 ### Step 2D: Iterative Propose-First Questioning
 
@@ -290,6 +292,7 @@ Use `batch_design` to create the design. Follow these rules:
 - Use `find_empty_space_on_canvas` when positioning new screens to avoid overlapping existing content
 - Generate images with the `G()` operation where needed (hero images, avatars, illustrations)
 - Set theme variables via `set_variables` if creating a new design system or extending an existing one
+- Use absolute positioning within flex layouts for floating elements (FABs, modals, overlays, tooltips)
 
 **Build order:**
 1. Create the screen/page frame with overall layout
@@ -464,13 +467,15 @@ Files are written as `<node-id>.png`. Rename them to human-readable names:
 mv $WORKTREE_PATH/<designPath>/screenshots/<node-id>.png $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
 ```
 
-**Editor mode**: For each screen/component:
-1. Call `get_screenshot(nodeId)` to capture a visual snapshot
-2. If the response returns a file path → copy it to the screenshots directory
-3. If the response returns base64 image data → decode it:
-   ```bash
-   echo '<base64-data>' | base64 -d > <designPath>/screenshots/<screen-name>.png
-   ```
+**Editor mode**: Export all screens via the `export_nodes` MCP tool:
+Call `export_nodes` with `filePath`, `nodeIds` (all screen/component IDs), `outputDir: "$WORKTREE_PATH/<designPath>/screenshots"`, and `format: "png"`. Files are written as `<node-id>.png`. Rename them to human-readable names:
+```bash
+mv $WORKTREE_PATH/<designPath>/screenshots/<node-id>.png $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
+```
+
+**Slides/presentation PDF export**: If the design type is `slides/presentation`, also export a combined PDF:
+- **CLI mode**: `export_nodes({ nodeIds: [<all-slide-ids>], outputDir: "$WORKTREE_PATH/<designPath>/screenshots", format: "pdf" })` — all slides are combined into a single multi-page PDF.
+- **Editor mode**: Call `export_nodes` with `format: "pdf"` and all slide node IDs. The tool combines them into one PDF document.
 
 **Both modes**: If screenshots cannot be saved to files, prepare textual descriptions of each screen for the PR body instead. For each screen, write a brief textual description (2–3 sentences) covering layout, key elements, and visual style — these go in the PR body regardless of whether image files are available.
 
