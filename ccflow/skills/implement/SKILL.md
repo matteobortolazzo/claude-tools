@@ -35,18 +35,29 @@ If `pencil.enabled` is `true` in `.claude/config.json`:
 
 1. **Determine design path**: Read `pencil.designPath` from config. If the project is a monorepo with `pencil.shared: false`, use the per-project `designPath` from the affected project's entry in the `projects` array.
 2. **Load DESIGN.md**: If `<designPath>/DESIGN.md` exists, read it and store as `designSpec`. This contains screen-to-route mappings, component-to-code mappings, design tokens, and naming conventions.
-3. **Note .pen file path**: Record the `.pen` file path from the DESIGN.md header for planner reference. Do not read the `.pen` file yet — subagents cannot use Pencil MCP tools, so `.pen` content must be pre-read by the main agent if needed.
+3. **Note .pen file path**: Record the `.pen` file path from the DESIGN.md header for planner reference. Do not read the `.pen` file yet — subagents cannot use Pencil tools, so `.pen` content must be pre-read by the main agent if needed.
 4. **Parse design structure from DESIGN.md** (if loaded):
    - Extract screen node IDs from the Screens table (these are Pencil node identifiers)
    - Extract component node IDs and their framework component mappings from the Components table
    - Extract design token references (CSS custom properties) from the Design Tokens section
    - Store these parsed values as `designScreenIds`, `designComponentMap`, and `designTokens` for use in Phase 1 (planner) and Phase 4 (implementer)
-5. **Pencil MCP availability probe**: Before any Pencil MCP calls later in the pipeline, attempt a lightweight probe:
+5. **Pencil availability probe**: Read `pencil.mode` from config (default: `"editor"`). Store as `$PENCIL_MODE`. Before any Pencil calls later in the pipeline, attempt a lightweight probe:
+
+   **CLI-app mode** (`pencil.mode` is `"cli-app"`):
+   ```bash
+   pencil interactive -a desktop <<'EOF'
+   get_editor_state({ include_schema: false })
+   EOF
    ```
-   Call `get_editor_state()` — if it succeeds, Pencil MCP is available for live reads.
-   If it fails or times out, set `pencilMcpAvailable = false`.
+   If it succeeds → set `pencilAvailable = true`. If it fails → set `pencilAvailable = false`.
+
+   **Editor mode** (`pencil.mode` is `"editor"`):
    ```
-   If the probe fails, inform the user: "Pencil MCP unavailable — proceeding with DESIGN.md text content only. Open Pencil and retry if live design reads are needed."
+   Call `get_editor_state()` via MCP — if it succeeds, set `pencilAvailable = true`.
+   If it fails or times out, set `pencilAvailable = false`.
+   ```
+
+   If the probe fails, inform the user: "Pencil unavailable — proceeding with DESIGN.md text content only. Open Pencil and retry if live design reads are needed."
    This probe runs once during context loading. Do not auto-launch Pencil.
 
 If `pencil.enabled` is not `true` or `pencil` is absent, skip this section.
@@ -550,30 +561,34 @@ If still failing after 3 attempts, stop and ask the user.
 
 **Prerequisites**: Tests written and failing (red phase complete).
 
-#### Design Structure Pre-Reading (if pencil.enabled and pencilMcpAvailable)
+#### Design Structure Pre-Reading (if pencil.enabled and pencilAvailable)
 
-Before delegating to the implementer, the **main agent** pre-reads design structure from the `.pen` file so the implementer subagent receives it as text context (subagents cannot use Pencil MCP tools).
+Before delegating to the implementer, the **main agent** pre-reads design structure from the `.pen` file so the implementer subagent receives it as text context (subagents cannot use Pencil tools).
 
 1. **Identify relevant screens**: From the ticket description and implementation plan, determine which screens (by node ID from `designScreenIds`) are affected by this ticket.
-2. **Read design structure**: For each relevant screen, call:
-   ```
-   batch_get(nodeIds: [<screen-node-id>], readDepth: 3)
-   ```
-   This returns the full component hierarchy for that screen. Store the output as `designStructure`.
-3. **Read design tokens**: Call:
-   ```
+
+2. **Read design structure and tokens**: 
+
+   **CLI-app mode**: Batch all reads into a single invocation:
+   ```bash
+   pencil interactive -a desktop <<'EOF'
+   batch_get({ nodeIds: ["<screen-node-id-1>", "<screen-node-id-2>"], readDepth: 3 })
    get_variables()
+   export_nodes({ nodeIds: ["<screen-node-id-1>", "<screen-node-id-2>"], outputDir: "$TMPDIR/design-screenshots", format: "png" })
+   EOF
    ```
-   This returns all design tokens (spacing, colors, typography) with current values. Store as `designTokenValues`.
-4. **Capture visual reference**: For each relevant screen, call:
-   ```
-   get_screenshot(nodeId: <screen-node-id>)
-   ```
-   Store the screenshot references for the implementer to compare against.
+   Then Read each exported PNG for visual references to pass to the implementer.
 
-If any Pencil MCP call fails, inform the user which calls failed and what data will be missing. Proceed with DESIGN.md text content only — do not block implementation.
+   **Editor mode**: Call each tool separately via MCP:
+   - `batch_get(nodeIds: [<screen-node-id>], readDepth: 3)` per screen
+   - `get_variables()`
+   - `get_screenshot(nodeId: <screen-node-id>)` per screen
 
-**Pass to implementer**: Include `designStructure`, `designTokenValues`, and screenshot references as text context in the implementer delegation prompt. If any data is missing due to MCP failures, note which pieces are absent so the implementer knows the design context is partial. Tell the implementer: "Use this design structure for component hierarchy. Use design token values for spacing, colors, and typography. Compare your implementation visually against the provided screenshots."
+3. Store the results as `designStructure` (component hierarchy), `designTokenValues` (tokens), and screenshot references.
+
+If any Pencil call fails, inform the user which calls failed and what data will be missing. Proceed with DESIGN.md text content only — do not block implementation.
+
+**Pass to implementer**: Include `designStructure`, `designTokenValues`, and screenshot references as text context in the implementer delegation prompt. If any data is missing due to failures, note which pieces are absent so the implementer knows the design context is partial. Tell the implementer: "Use this design structure for component hierarchy. Use design token values for spacing, colors, and typography. Compare your implementation visually against the provided screenshots."
 
 #### Process
 
@@ -599,19 +614,28 @@ After all functional tests pass, if the plan's Test Strategy includes visual com
 
 See the `testing` skill's "Browser Testing Tools" section for the full decision framework.
 
-#### Design Comparison (if pencil.enabled and pencilMcpAvailable)
+#### Design Comparison (if pencil.enabled and pencilAvailable)
 
 After functional tests pass and standard visual verification is complete:
 
-1. **Screenshot comparison**: Use the screenshot references captured during Design Structure Pre-Reading. If not available (pre-reading was skipped or failed), call `get_screenshot(nodeId: <screen-node-id>)` per screen. Compare side-by-side with the Playwright screenshot of the implemented page. Note any significant visual discrepancies.
-2. **Layout verification**: Call `snapshot_layout` to check for layout problems:
+1. **Screenshot comparison**: Use the screenshot references captured during Design Structure Pre-Reading. If not available (pre-reading was skipped or failed):
+
+   **CLI-app mode**:
+   ```bash
+   pencil interactive -a desktop <<'EOF'
+   export_nodes({ nodeIds: ["<screen-node-id>"], outputDir: "$TMPDIR/design-comparison", format: "png" })
+   snapshot_layout({ parentId: "<screen-node-id>", problemsOnly: true })
+   EOF
    ```
-   snapshot_layout(parentId: <screen-node-id>, problemsOnly: true)
-   ```
-   Review the layout rectangles for clipping, overflow, or misalignment issues that might indicate the implementation diverges from the design.
+   Then Read the exported PNG for comparison.
+
+   **Editor mode**: Call `get_screenshot(nodeId: <screen-node-id>)` and `snapshot_layout(parentId: <screen-node-id>, problemsOnly: true)` via MCP.
+
+   Compare side-by-side with the Playwright screenshot of the implemented page. Note any significant visual discrepancies.
+2. **Layout verification**: Review the `snapshot_layout` output for clipping, overflow, or misalignment issues that might indicate the implementation diverges from the design.
 3. If discrepancies are found, list them and delegate fixes to the implementer. Re-run the comparison after fixes. Only proceed to Phase 5 once comparison passes or the user explicitly accepts the remaining gaps.
 
-If Pencil MCP is unavailable (`pencilMcpAvailable = false`), skip this section and note in the PR description that design comparison was not performed.
+If Pencil is unavailable (`pencilAvailable = false`), skip this section and note in the PR description that design comparison was not performed.
 
 #### Rules
 

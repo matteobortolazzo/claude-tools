@@ -4,15 +4,17 @@ description: Interactive design reasoning and .pen file creation using Pencil
 argument-hint: <ticket-id | design description> [additional context]
 user-invocable: true
 disable-model-invocation: true
-allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, WebFetch, mcp__pencil__get_editor_state, mcp__pencil__get_guidelines, mcp__pencil__get_style_guide_tags, mcp__pencil__get_style_guide, mcp__pencil__batch_get, mcp__pencil__batch_design, mcp__pencil__get_screenshot, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__snapshot_layout, mcp__pencil__open_document, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__replace_all_matching_properties, mcp__pencil__search_all_unique_properties
+allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, WebFetch, mcp__pencil__get_editor_state, mcp__pencil__get_guidelines, mcp__pencil__batch_get, mcp__pencil__batch_design, mcp__pencil__get_screenshot, mcp__pencil__export_nodes, mcp__pencil__find_empty_space_on_canvas, mcp__pencil__snapshot_layout, mcp__pencil__open_document, mcp__pencil__get_variables, mcp__pencil__set_variables, mcp__pencil__replace_all_matching_properties, mcp__pencil__search_all_unique_properties
 ---
 
-<!-- Architecture note: ccflow orchestrates Pencil via MCP (ccflow-driven model).
+<!-- Architecture note: ccflow orchestrates Pencil via `pencil interactive` CLI (ccflow-driven model).
      We do NOT use `pencil --agent-config` because:
      1. ccflow needs ticket/worktree/approval workflow integration that agent-config agents lack
      2. agent-config agents have no ccflow context (config, rules, lessons-learned)
      3. For complex designs, we batch via multiple `batch_design` calls within one session
-     The Pencil editor (or future headless mode) is always the MCP server, Claude Code is the client. -->
+     The Pencil editor is the design engine; Claude Code drives it via CLI subprocess (or MCP as legacy fallback).
+     CLI mode (`pencil interactive -a desktop`) avoids loading MCP tool schemas into every conversation,
+     saving ~3,000-5,000 tokens per conversation and enabling command batching via heredocs. -->
 
 ## Phase 0 — Context Loading
 
@@ -26,39 +28,71 @@ Read `.claude/config.json`.
 
 Read `pencil.designPath` from the config to determine where design files belong. If the project is a monorepo with `pencil.shared: false`, determine the per-project `designPath` from the affected project's entry in the `projects` array.
 
-## Phase 0.5 — MCP Availability Check
+## Pencil Communication Mode
 
-Before parsing arguments, verify that the Pencil MCP server is reachable.
+Read `pencil.mode` from `.claude/config.json` and store as `$PENCIL_MODE`. Default: `"editor"` if absent.
 
-Read `pencil.mode` from `.claude/config.json` (default: `"editor"` if not present).
+**Convention**: All Pencil tool calls in this skill follow `$PENCIL_MODE`:
 
-**Editor mode** (`pencil.mode` is `"editor"` or absent):
+- **`"cli-app"`** (default for new installs): Execute tool calls via `pencil interactive -a desktop` heredoc using the Bash tool. Multiple independent commands can be batched in a single heredoc.
 
-1. Call `get_editor_state(include_schema: false)` as a connectivity probe.
-2. **If the call succeeds** → Pencil MCP is available. Check the response for the currently active document file path and store it as `$PENCIL_OPEN_DOC` (set to the file path string if a document is open, or empty if no document is open). Proceed to argument parsing.
+  ```bash
+  pencil interactive -a desktop <<'EOF'
+  tool_name({ key: value })
+  another_tool({ key: value })
+  EOF
+  ```
+
+  Split into separate heredoc invocations at **decision boundaries** — where you need to read output before choosing the next action.
+
+- **`"editor"`** (legacy MCP fallback): Call the equivalent `mcp__pencil__<tool>` MCP tool directly (e.g., `mcp__pencil__batch_design`). One tool call per invocation.
+
+**Special cases in CLI mode**:
+
+| Operation | CLI mode | Editor (MCP) mode |
+|-----------|----------|-------------------|
+| Screenshots | Use `export_nodes({ nodeIds: [...], outputDir: "<path>", format: "png" })` — writes to disk. Then Read the exported PNG with the Read tool. | Use `get_screenshot(nodeId)` — returns image inline. |
+| Batch reads | Combine multiple `batch_get` + `get_variables` calls in one heredoc | One MCP call per tool |
+| Batch writes | Combine multiple `batch_design` calls in one heredoc (when independent) | One MCP call per tool |
+
+When this skill says "Call `<tool_name>(...)`", execute it according to `$PENCIL_MODE`. Explicit CLI/MCP examples are only given where the modes diverge.
+
+## Phase 0.5 — Pencil Availability Check
+
+Before parsing arguments, verify that Pencil is reachable.
+
+**CLI-app mode** (`$PENCIL_MODE` is `"cli-app"`):
+
+1. Probe via Bash:
+   ```bash
+   pencil interactive -a desktop <<'EOF'
+   get_editor_state({ include_schema: false })
+   EOF
+   ```
+2. **If the call succeeds** → Pencil is available. Check the response for the currently active document file path and store it as `$PENCIL_OPEN_DOC` (set to the file path string if a document is open, or empty if no document is open). Proceed to argument parsing.
 3. **If the call fails** → attempt auto-launch:
-   a. Run `which pencil 2>/dev/null` to check if the Pencil CLI is installed.
-   b. **If CLI found**: Run `pencil &` to launch Pencil in the background, then retry `get_editor_state(include_schema: false)` up to 3 times with 3-second pauses between attempts.
+   a. Run `pencil &` to launch Pencil in the background, then retry the probe up to 3 times with 3-second pauses between attempts.
+      - If a retry succeeds → proceed to argument parsing.
+      - If all 3 retries fail → tell the user:
+        "Pencil was launched but the CLI connection could not be established. Ensure Pencil is running and accepting CLI connections."
+        **Stop.**
+
+**Editor mode** (`$PENCIL_MODE` is `"editor"`):
+
+1. Call `get_editor_state(include_schema: false)` as an MCP connectivity probe.
+2. **If the call succeeds** → Pencil MCP is available. Store active document path as `$PENCIL_OPEN_DOC`. Proceed to argument parsing.
+3. **If the call fails** → attempt auto-launch:
+   a. Run `which pencil 2>/dev/null` to check if the `pencil` command is available.
+   b. **If found**: Run `pencil &` to launch Pencil in the background, then retry `get_editor_state(include_schema: false)` up to 3 times with 3-second pauses between attempts.
       - If a retry succeeds → proceed to argument parsing.
       - If all 3 retries fail → tell the user:
         "Pencil was launched but the MCP connection could not be established. Check MCP server status in Pencil (View → MCP Server Status) and ensure the Pencil MCP server is listed in your Claude Code MCP configuration."
         **Stop.**
-   c. **If CLI not found**: Tell the user:
-      "The Pencil editor is not running and the `pencil` CLI is not installed. Either:
+   c. **If not found**: Tell the user:
+      "The Pencil editor is not running and the `pencil` command is not in PATH. Either:
       1. Open Pencil manually and ensure its MCP server is connected, or
-      2. Install the CLI (in Pencil: File → Install `pencil` command into PATH) for auto-launch support."
+      2. Install the `pencil` command from within the Pencil app (File → Install `pencil` command into PATH) for auto-launch support."
       **Stop.**
-
-**Headless mode** (`pencil.mode` is `"headless"` — future):
-
-1. Verify that a headless Pencil MCP server entry exists in `.mcp.json` (project or plugin scope).
-2. Call `get_editor_state(include_schema: false)` as a probe.
-3. If it fails → tell the user: "Headless Pencil MCP server is configured but not responding. Check your `.mcp.json` configuration." **Stop.**
-
-**Auto mode** (`pencil.mode` is `"auto"` — future):
-
-1. Try headless mode first (steps above).
-2. If headless is not configured or fails → fall back to editor mode (steps above).
 
 **Parse `$ARGUMENTS` — Mode Detection:**
 
@@ -109,6 +143,7 @@ Based on the ticket description (or design description in ticketless mode), clas
 | **dashboard** | Analytics dashboard, admin panel |
 | **landing-page** | Marketing page, product page, hero section |
 | **form/wizard** | Multi-step form, signup wizard, onboarding |
+| **slides/presentation** | Pitch deck, project update, onboarding slides |
 
 ### Step 2B: Retrieve Pencil Guidelines
 
@@ -119,12 +154,13 @@ Call `get_guidelines` with the topic most relevant to the classification:
 | landing-page | `landing-page` |
 | dashboard, screen/page, form/wizard | `design-system` |
 | component | `design-system` |
+| slides/presentation | `slides` |
 
 ### Step 2C: Get Style Inspiration
 
-1. Call `get_style_guide_tags` to retrieve all available tags
-2. Select 5–10 tags that best match the design task
-3. Call `get_style_guide` with the selected tags
+1. Call `get_guidelines({ category: "style" })` to list available styles
+2. Select the style that best matches the design task based on classification and context
+3. Call `get_guidelines({ category: "style", name: "<selected-style>" })` to load the full style definition (pass any required `params` if the style requests them)
 
 ### Step 2D: Iterative Propose-First Questioning
 
@@ -224,7 +260,7 @@ First, call `get_editor_state(include_schema: false)` and update `$PENCIL_OPEN_D
 **If `$PENCIL_OPEN_DOC` is set** (a document is already open):
 - Determine the **target file**: the design system `.pen` file path or `"new"` (if designing from scratch).
 - If `$PENCIL_OPEN_DOC` already matches the target file path → no action needed, proceed.
-- Otherwise → do **NOT** call `open_document` (calling it with an editor already open spawns a new Pencil instance and disconnects the MCP server). Ask the user via `AskUserQuestion`:
+- Otherwise → do **NOT** call `open_document` (calling it with an editor already open spawns a new Pencil instance and breaks the connection). Ask the user via `AskUserQuestion`:
   > "Pencil already has `<$PENCIL_OPEN_DOC>` open. I need to open `<target file or 'a new document'>` instead. Please close the current file in Pencil (File → Close) or switch to the target file (File → Open), then confirm here."
   Options: "Done, ready to proceed", "Cancel design"
   - If **"Done"** → call `get_editor_state(include_schema: false)` to verify. Update `$PENCIL_OPEN_DOC`.
@@ -233,7 +269,7 @@ First, call `get_editor_state(include_schema: false)` and update `$PENCIL_OPEN_D
     - If the wrong file is still open → ask again (loop once, then stop with an error if still wrong).
   - If **"Cancel design"** → **Stop.**
 
-**Important**: Pass the explicit `filePath` parameter pointing into the repository for all subsequent Pencil MCP tool calls (`batch_get`, `batch_design`, `get_screenshot`, `snapshot_layout`, `get_variables`, `set_variables`, etc.).
+**Important (editor mode only)**: Pass the explicit `filePath` parameter pointing into the repository for all subsequent Pencil MCP tool calls. In CLI mode, the file path is managed by the Pencil desktop app and does not need to be passed explicitly.
 
 ### Step 3B: Get Editor State
 
@@ -256,6 +292,7 @@ Use `batch_design` to create the design. Follow these rules:
 - Use `find_empty_space_on_canvas` when positioning new screens to avoid overlapping existing content
 - Generate images with the `G()` operation where needed (hero images, avatars, illustrations)
 - Set theme variables via `set_variables` if creating a new design system or extending an existing one
+- Use absolute positioning within flex layouts for floating elements (FABs, modals, overlays, tooltips)
 
 **Build order:**
 1. Create the screen/page frame with overall layout
@@ -278,14 +315,23 @@ If the user requested responsive designs:
 
 For each screen/component created:
 
-1. Call `get_screenshot` to capture a visual snapshot
+1. Capture a visual snapshot:
+   - **CLI mode**: Call `export_nodes` to save screenshots to disk, then Read the exported PNG:
+     ```bash
+     pencil interactive -a desktop <<'EOF'
+     export_nodes({ nodeIds: ["<node-id>"], outputDir: "$WORKTREE_PATH/<designPath>/screenshots", format: "png" })
+     snapshot_layout({ parentId: "<node-id>", problemsOnly: true })
+     EOF
+     ```
+     Then: `Read("$WORKTREE_PATH/<designPath>/screenshots/<node-id>.png")` to view and analyze.
+   - **Editor mode**: Call `get_screenshot(nodeId)` to receive the image inline.
 2. **Analyze the screenshot** for:
    - Alignment issues (elements not lined up properly)
    - Readability problems (text too small, low contrast)
    - Visual hierarchy (clear headings, proper spacing, content grouping)
    - Completeness (all specified elements present)
    - Clipping (content cut off or overflowing)
-3. Call `snapshot_layout` with `problemsOnly: true` to detect layout problems programmatically
+3. Review `snapshot_layout` output (captured alongside the screenshot) for programmatic layout problems
 4. Fix any issues found via additional `batch_design` calls
 5. Re-screenshot after fixes to confirm they resolved the problems
 
@@ -319,10 +365,25 @@ After the user approves the design in Phase 4, generate a `DESIGN.md` spec that 
 
 ### Step A: Extract data from .pen file
 
-1. **Screens**: `batch_get(patterns: [{name: "Screen/.*"}])` — extract name, node ID. Derive route from the screen name (e.g., `Screen/training-plan` → `/training-plan`). Add a brief description based on the screen content.
-2. **Components**: `batch_get(patterns: [{reusable: true}], readDepth: 2)` — extract name, node ID. Derive the framework component name from the Pencil component name (e.g., `Component/ExerciseCard` → `ExerciseCardComponent` for Angular, `ExerciseCard` for React). Determine UI library usage (e.g., PrimeNG, Material UI, custom) from component structure. Note which screens use each component.
-3. **Annotations**: `batch_get(patterns: [{name: "Note:.*"}])` — extract name, node ID, and topic from the note content.
-4. **Tokens**: `get_variables()` — categorize variables into Colors, Typography, Radii, and Spacing. Map each to a CSS custom property name (e.g., `$bg-card` → `--bg-card`).
+In CLI mode, batch all reads into a single invocation:
+
+```bash
+pencil interactive -a desktop <<'EOF'
+batch_get({ patterns: [{ name: "Screen/.*" }] })
+batch_get({ patterns: [{ reusable: true }], readDepth: 2 })
+batch_get({ patterns: [{ name: "Note:.*" }] })
+get_variables()
+EOF
+```
+
+In editor mode, call each tool separately via MCP.
+
+Parse the output into:
+
+1. **Screens**: From the `Screen/.*` results — extract name, node ID. Derive route from the screen name (e.g., `Screen/training-plan` → `/training-plan`). Add a brief description based on the screen content.
+2. **Components**: From the `reusable: true` results — extract name, node ID. Derive the framework component name from the Pencil component name (e.g., `Component/ExerciseCard` → `ExerciseCardComponent` for Angular, `ExerciseCard` for React). Determine UI library usage (e.g., PrimeNG, Material UI, custom) from component structure. Note which screens use each component.
+3. **Annotations**: From the `Note:.*` results — extract name, node ID, and topic from the note content.
+4. **Tokens**: From `get_variables()` — categorize variables into Colors, Typography, Radii, and Spacing. Map each to a CSS custom property name (e.g., `$bg-card` → `--bg-card`).
 
 ### Step B: Detect framework from config
 
@@ -374,7 +435,7 @@ Summarize what was created:
 - `DESIGN.md` path, screen count, component count, token count
 
 Include this note at the end of the report:
-> "Note: The design file remains open in Pencil. Close it manually when done reviewing. (Pencil's MCP does not currently provide a `close_document` tool.)"
+> "Note: The design file remains open in Pencil. Close it manually when done reviewing."
 
 ### Label "Working" (at start)
 
@@ -391,24 +452,32 @@ After Phase 5 reporting is complete, create a pull request containing the design
 
 ### Step 6A: Capture Design Screenshots
 
-For each screen/component designed:
+```bash
+mkdir -p $WORKTREE_PATH/<designPath>/screenshots
+```
 
-1. Call `get_screenshot` on the screen's node ID to capture a visual snapshot
-2. Attempt to save the screenshot:
-   ```bash
-   mkdir -p <designPath>/screenshots
-   ```
-3. If `get_screenshot` returns a file path → copy it:
-   ```bash
-   cp <screenshot-path> <designPath>/screenshots/<screen-name>.png
-   ```
-4. If `get_screenshot` returns base64 image data → decode it:
-   ```bash
-   echo '<base64-data>' | base64 -d > <designPath>/screenshots/<screen-name>.png
-   ```
-5. If screenshots cannot be saved to files (neither path nor base64 available), prepare textual descriptions of each screen for the PR body instead
+**CLI mode**: Export all screens in a single call:
+```bash
+pencil interactive -a desktop <<'EOF'
+export_nodes({ nodeIds: ["<id1>", "<id2>", ...], outputDir: "$WORKTREE_PATH/<designPath>/screenshots", format: "png" })
+EOF
+```
+Files are written as `<node-id>.png`. Rename them to human-readable names:
+```bash
+mv $WORKTREE_PATH/<designPath>/screenshots/<node-id>.png $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
+```
 
-For each screen, write a brief textual description (2–3 sentences) covering layout, key elements, and visual style — these go in the PR body regardless of whether image files are available.
+**Editor mode**: Export all screens via the `export_nodes` MCP tool:
+Call `export_nodes` with `filePath`, `nodeIds` (all screen/component IDs), `outputDir: "$WORKTREE_PATH/<designPath>/screenshots"`, and `format: "png"`. Files are written as `<node-id>.png`. Rename them to human-readable names:
+```bash
+mv $WORKTREE_PATH/<designPath>/screenshots/<node-id>.png $WORKTREE_PATH/<designPath>/screenshots/<screen-name>.png
+```
+
+**Slides/presentation PDF export**: If the design type is `slides/presentation`, also export a combined PDF:
+- **CLI mode**: `export_nodes({ nodeIds: [<all-slide-ids>], outputDir: "$WORKTREE_PATH/<designPath>/screenshots", format: "pdf" })` — all slides are combined into a single multi-page PDF.
+- **Editor mode**: Call `export_nodes` with `format: "pdf"` and all slide node IDs. The tool combines them into one PDF document.
+
+**Both modes**: If screenshots cannot be saved to files, prepare textual descriptions of each screen for the PR body instead. For each screen, write a brief textual description (2–3 sentences) covering layout, key elements, and visual style — these go in the PR body regardless of whether image files are available.
 
 ### Step 6B: Commit
 
