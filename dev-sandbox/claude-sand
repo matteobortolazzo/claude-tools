@@ -99,7 +99,7 @@ if "${RUNTIME}" ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAM
         echo "Attaching shell to running '${CONTAINER_NAME}'..."
         "${RUNTIME}" exec -it "${CONTAINER_NAME}" /bin/bash
     else
-        "${RUNTIME}" exec -it "${CONTAINER_NAME}" claude "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
+        "${RUNTIME}" exec -it -e "TMUX_PANE=${TMUX_PANE:-}" "${CONTAINER_NAME}" claude "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
     fi
     exit $?
 fi
