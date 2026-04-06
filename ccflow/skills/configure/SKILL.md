@@ -459,7 +459,7 @@ For each MCP selected in question 5:
 
 5. Update `.gitignore`:
    - Add `.worktrees/` if not present
-   - Add `.claude/plans/` if not present (plan files are ephemeral, session-specific)
+   - Add `.plans/` if not present (plan files are ephemeral, session-specific)
    - **If sandbox is enabled**: Add sandbox artifact entries if not already present. The sandbox exposes git internals, shell configs, and tool configs as visible entries in the working directory. Add these entries under a `# Claude Code sandbox artifacts` comment:
      ```
      # Claude Code sandbox artifacts

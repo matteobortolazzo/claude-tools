@@ -73,7 +73,7 @@ Extract the first whitespace-delimited token from `$ARGUMENTS` and determine the
   - Everything after the first token is optional **user context** (additional instructions or focus areas).
   - Examples: `#1 focus on API` → ID `1`, context `focus on API`; `7` → ID `7`, no context.
 
-- **If the first token ends in `.md` and resolves to a file in `.claude/plans/`** → **plan file mode**
+- **If the first token ends in `.md` and resolves to a file in `.plans/`** → **plan file mode**
   - Read the plan file. Parse the YAML front matter (between `---` delimiters) to extract metadata: `version`, `mode`, `ticketId`, `ticketTitle`, `slug`, `isChild`, `isLastChild`, `parentId`, `planCommitSha`, `createdAt`, `status`.
   - Set `hasPlanFile = true`.
   - Inherit the original mode (`ticket` or `ticketless`) from the front matter's `mode` field.
@@ -88,7 +88,7 @@ Extract the first whitespace-delimited token from `$ARGUMENTS` and determine the
 
 The determined mode (ticket or ticketless) governs conditional behavior throughout the rest of this skill.
 
-**Plan file auto-detection** (ticket mode only): If the first token is a ticket ID (ticket mode) and a file matching `.claude/plans/<id>-*.md` exists, present the user with a choice using `AskUserQuestion`:
+**Plan file auto-detection** (ticket mode only): If the first token is a ticket ID (ticket mode) and a file matching `.plans/<id>-*.md` exists, present the user with a choice using `AskUserQuestion`:
 - **"Use existing plan"** — switch to plan file mode, set `hasPlanFile = true`, read the plan file
 - **"Re-plan from scratch"** — ignore the plan file, proceed with normal ticket mode
 
@@ -392,7 +392,7 @@ If the task appears too large to implement well in a single PR, recommend the us
 
 After the user approves the plan in Step 1D, persist it to disk before proceeding:
 
-1. Create the plans directory: `mkdir -p .claude/plans/`
+1. Create the plans directory: `mkdir -p .plans/`
 2. Compose the plan file with YAML front matter and markdown body:
 
 ```markdown
@@ -433,14 +433,14 @@ planCommitSha: abc123def
 ```
 
 3. Write the file:
-   - **Ticket mode**: `.claude/plans/<ticket-id>-<slug>.md`
-   - **Ticketless mode**: `.claude/plans/<slug>.md`
+   - **Ticket mode**: `.plans/<ticket-id>-<slug>.md`
+   - **Ticketless mode**: `.plans/<slug>.md`
 4. Record `planCommitSha` as the output of `git rev-parse HEAD`
 5. For ticketless mode, omit `ticketId`, `ticketTitle`, `isChild`, `isLastChild`, and `parentId` from the front matter.
-6. Inform the user: "Plan saved to `.claude/plans/<filename>`. You can continue now or resume in a new session."
+6. Inform the user: "Plan saved to `.plans/<filename>`. You can continue now or resume in a new session."
 7. Ask the user using `AskUserQuestion`:
    - **"Continue implementation now"** — proceed to Phase 2 (current flow preserved)
-   - **"Stop here (implement later in a fresh session)"** — end the skill. The plan file remains for later use. Tell the user: "Plan saved. Start a new session and run `/ccflow:implement .claude/plans/<filename>` to resume, or the SessionStart hook will remind you."
+   - **"Stop here (implement later in a fresh session)"** — end the skill. The plan file remains for later use. Tell the user: "Plan saved. Start a new session and run `/ccflow:implement .plans/<filename>` to resume, or the SessionStart hook will remind you."
 #### Optional: Deep Codebase Exploration
 
 If `.claude/config.json` contains `"deepExploration": true`, run an exploration step **before** Step 1A:
@@ -1067,13 +1067,13 @@ gh issue edit <parentId> --repo <owner>/<repo> --add-label "Implemented"
 **If `hasPlanFile` is true**: After successful PR creation (Step 4 completes), delete the consumed plan file:
 
 ```bash
-rm .claude/plans/<plan-filename>.md
+rm .plans/<plan-filename>.md
 ```
 
-If the `.claude/plans/` directory is now empty, remove it too:
+If the `.plans/` directory is now empty, remove it too:
 
 ```bash
-rmdir .claude/plans/ 2>/dev/null
+rmdir .plans/ 2>/dev/null
 ```
 
 This prevents stale plan files from accumulating. If the pipeline fails before PR creation, the plan file is preserved so the user can retry.
