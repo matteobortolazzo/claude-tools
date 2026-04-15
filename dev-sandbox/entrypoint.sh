@@ -44,4 +44,22 @@ if [[ -f /tmp/host-gh-config/hosts.yml ]]; then
     chmod 600 /home/dev/.config/gh/hosts.yml
 fi
 
+# ── Docker socket group alignment (DooD) ────────────────────────────
+if [[ -S /var/run/docker.sock ]]; then
+    SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+    EXISTING_GROUP=$(getent group "${SOCK_GID}" | cut -d: -f1 || true)
+    if [[ -z "${EXISTING_GROUP}" ]]; then
+        sudo groupadd -g "${SOCK_GID}" docker
+        EXISTING_GROUP="docker"
+    fi
+    if ! id -nG dev | grep -qw "${EXISTING_GROUP}"; then
+        sudo usermod -aG "${EXISTING_GROUP}" dev
+        if [[ $# -gt 0 ]]; then
+            exec sg "${EXISTING_GROUP}" -c "/bin/bash $(printf '%q ' "$@")"
+        else
+            exec sg "${EXISTING_GROUP}" -c /bin/bash
+        fi
+    fi
+fi
+
 exec /bin/bash "$@"

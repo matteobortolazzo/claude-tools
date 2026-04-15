@@ -37,6 +37,10 @@ claude-sand --name myproject
 # Rebuild the image (after changing Dockerfile or SDK versions)
 claude-sand --build
 
+# Enable Docker socket mounting (for TestContainers, docker build, etc.)
+claude-sand --docker --shell
+claude-sand --docker -p "run the integration tests"
+
 # Use host networking for manual OAuth (browser callback)
 claude-sand --host-network --shell
 ```
@@ -80,6 +84,7 @@ Everything persists in the home volume — only needs to happen once per instanc
 | git, ripgrep, jq, curl | latest | — |
 | build-essential | latest | — |
 | Python 3 | latest | — |
+| Docker CLI | latest | — |
 
 Override versions at build time:
 
@@ -117,6 +122,23 @@ docker build --build-arg DOTNET_SDK_VERSION=10.0.200 \
 | `~/.config/git/config` or `~/.gitconfig` | `/home/dev/.gitconfig` | Git identity |
 | `~/.claude/.credentials.json` | `/tmp/host-claude-creds/` (staging) | Claude OAuth tokens (copied to home on start) |
 | `~/.config/gh/hosts.yml` | `/tmp/host-gh-config/` (staging) | GitHub CLI tokens (copied to home on start) |
+
+### Docker (optional, opt-in)
+
+Mount the host Docker/Podman socket into the container for Docker-outside-of-Docker (DooD):
+
+```bash
+claude-sand --docker
+```
+
+This enables:
+- **TestContainers**: Integration tests that spin up containers (databases, message brokers, etc.)
+- **Docker CLI**: Build images, run containers, use docker compose
+- **Any Docker SDK usage**: Libraries that talk to the Docker daemon
+
+The entrypoint automatically detects the socket's group ownership and adds the `dev` user to the matching group.
+
+**Security note**: The `--docker` flag grants the container access to the host's Docker daemon. Any container started from within the sandbox runs on the host, with full Docker privileges. This is why it is opt-in.
 
 ### Muxwatch (optional)
 
