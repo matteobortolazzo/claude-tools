@@ -24,6 +24,7 @@ INSTANCE_NAME="default"
 BUILD_ONLY=false
 SHELL_ONLY=false
 HOST_NETWORK=false
+DOCKER_SOCKET=false
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --host-network)
             HOST_NETWORK=true
+            shift
+            ;;
+        --docker)
+            DOCKER_SOCKET=true
             shift
             ;;
         *)
@@ -170,6 +175,21 @@ if "${HOST_NETWORK}"; then
 fi
 
 [[ -n "${COLORTERM:-}" ]] && RUN_ARGS+=(-e "COLORTERM=${COLORTERM}")
+
+# Docker socket (opt-in DooD)
+if "${DOCKER_SOCKET}"; then
+    DOCKER_SOCK=""
+    if [[ -S /var/run/docker.sock ]]; then
+        DOCKER_SOCK="/var/run/docker.sock"
+    elif [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
+        DOCKER_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+    fi
+    if [[ -n "${DOCKER_SOCK}" ]]; then
+        RUN_ARGS+=(-v "${DOCKER_SOCK}:/var/run/docker.sock")
+    else
+        echo "Warning: --docker requested but no container runtime socket found." >&2
+    fi
+fi
 
 # ── Run ─────────────────────────────────────────────────────────
 if "${SHELL_ONLY}"; then
