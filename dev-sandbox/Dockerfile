@@ -1,3 +1,6 @@
+ARG UV_VERSION=latest
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 FROM ubuntu:24.04
 
 ARG DOTNET_SDK_VERSION=10.0.100
@@ -41,6 +44,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
     | tar -C /usr/local -xzf -
 ENV PATH="/usr/local/go/bin:${PATH}"
+
+# ── uv (Python package & project manager) ───────────────────────
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \

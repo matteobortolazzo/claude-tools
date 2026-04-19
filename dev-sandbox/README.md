@@ -84,6 +84,7 @@ Everything persists in the home volume — only needs to happen once per instanc
 | git, ripgrep, jq, curl | latest | — |
 | build-essential | latest | — |
 | Python 3 | latest | — |
+| uv | latest | `UV_VERSION` |
 | Docker CLI | latest | — |
 
 Override versions at build time:
