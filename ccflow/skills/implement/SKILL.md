@@ -823,7 +823,9 @@ This runs in parallel with the security and code reviewers.
 
 Skip entirely if no self-corrections occurred and no doc updates are warranted.
 
-**Prerequisites**: Code review and security review complete, all fixes applied.
+**Prerequisites**: Code review and security review complete, all fixes applied. Running inside the worktree.
+
+**Worktree rooting (applies to all sub-steps):** All file edits in this phase MUST land **inside the feature worktree** so Phase 9's `git add -A` captures them in the PR. When delegating to subagents or performing Read/Write/Edit here, always reference files by absolute paths rooted at `<worktree-path>` (the path from Phase 2). Relative paths like `.claude/rules/lessons-learned.md` resolve against the main-agent's root — typically the main worktree — and their changes will be stranded outside the PR.
 
 #### Step 8A: Capture Lessons
 
@@ -835,8 +837,8 @@ Skip if no self-corrections occurred during the session.
    - Wrong APIs or patterns used then corrected
    - Test failures with non-obvious causes
    - Incorrect assumptions that led to rework
-2. If self-corrections occurred, delegate to the **lessons-collector** agent
-3. The agent appends entries to `.claude/rules/lessons-learned.md` in the target project
+2. If self-corrections occurred, delegate to the **lessons-collector** agent. **Pass `<worktree-path>` as the project root** and instruct the agent to prefix every rule-file path with it (e.g. `<worktree-path>/.claude/rules/lessons-learned.md`).
+3. The agent appends entries to `<worktree-path>/.claude/rules/lessons-learned.md` in the target project so they're staged with the feature commit.
 
 **Skip Step 8A if no self-corrections occurred during the session.**
 
@@ -849,8 +851,8 @@ Each lesson must be:
 
 ##### Error Recovery
 
-If `.claude/rules/lessons-learned.md` doesn't exist, create it with a header.
-If it exceeds 100 entries, suggest consolidating related entries into permanent rules in `.claude/rules/<topic>.md`.
+If `<worktree-path>/.claude/rules/lessons-learned.md` doesn't exist, create it with a header.
+If it exceeds 100 entries, suggest consolidating related entries into permanent rules in `<worktree-path>/.claude/rules/<topic>.md`.
 
 #### Step 8B: Update CLAUDE.md (if warranted)
 
@@ -865,9 +867,9 @@ If it exceeds 100 entries, suggest consolidating related entries into permanent 
 - Implementation details specific to one feature
 
 **Process:**
-1. Read `claudeMdLocation` from `.claude/config.json` (default: `.claude/CLAUDE.md`)
-2. Read current CLAUDE.md content
-3. Append new rules under `## Critical Rules` as bullet points
+1. Read `claudeMdLocation` from `<worktree-path>/.claude/config.json` (default: `<worktree-path>/.claude/CLAUDE.md`)
+2. Read current CLAUDE.md content from that absolute path
+3. Append new rules under `## Critical Rules` as bullet points (write to the same absolute path)
 4. Do not remove or rewrite existing content — only append
 
 #### Step 8C: Update README.md (if warranted)
@@ -883,8 +885,8 @@ If it exceeds 100 entries, suggest consolidating related entries into permanent 
 - Changes with no user-facing impact
 
 **Process:**
-1. Read `README.md` at project root
-2. Add documentation matching existing style/structure
+1. Read `<worktree-path>/README.md` at project root
+2. Add documentation matching existing style/structure (write back to the same absolute path)
 3. Keep changes minimal
 
 </details>
