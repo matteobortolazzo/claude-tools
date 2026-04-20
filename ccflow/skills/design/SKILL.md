@@ -212,34 +212,9 @@ Options (multiSelect=true): "Empty state", "Populated / default", "Error state",
 
 Options: "Desktop only", "Desktop + Mobile", "Desktop + Tablet + Mobile"
 
-## Phase 2.5 — Branch Setup
+## Phase 2.5 — Prepare Design Directory
 
-After all design questions are answered, create a feature branch before any file creation or modification.
-
-**Why not a worktree?** Pencil resolves file paths within its editor. Worktree paths (`.worktrees/<name>/...`) can cause issues with saves, autosaves, and MCP file operations. The design skill works directly in the main worktree on a feature branch instead.
-
-### Step 2.5A: Ensure HEAD exists
-
-```bash
-git rev-parse HEAD 2>/dev/null
-```
-If this fails (no commits exist), create an initial commit:
-```bash
-git add -A && git commit -m "chore: initial commit" --allow-empty
-```
-
-### Step 2.5B: Create feature branch
-
-- **If ticket mode:**
-  ```bash
-  git checkout -b feature/<ticket-id>-design
-  ```
-- **If ticketless mode:** Derive a slug from the design description (lowercase, hyphens, max 30 chars):
-  ```bash
-  git checkout -b feature/<auto-slug>-design
-  ```
-
-### Step 2.5C: Prepare design directory
+After all design questions are answered, ensure the design directory exists. Design work runs directly on the current branch (expected: `main`) — **no feature branch is created**. Pencil keeps the `.pen` file open across invocations, and branch switching forces the user to re-open it manually in Pencil.
 
 ```bash
 mkdir -p <designPath>
@@ -446,9 +421,9 @@ Include this note at the end of the report:
 gh issue edit <number> --repo <owner>/<repo> --add-label "Working"
 ```
 
-## Phase 6 — Create PR
+## Phase 6 — Commit Design
 
-After Phase 5 reporting is complete, create a pull request containing the design artifacts.
+After Phase 5 reporting is complete, commit the design artifacts on the current branch. **No branch switch, no push, no PR.**
 
 ### Step 6A: Capture Design Screenshots
 
@@ -481,7 +456,7 @@ mv $WORKTREE_PATH/<designPath>/screenshots/<node-id>.png $WORKTREE_PATH/<designP
 
 ### Step 6B: Commit
 
-Stage and commit all design artifacts:
+Stage and commit all design artifacts on the current branch:
 
 ```bash
 git add <designPath>/ && git commit -m "feat(design): <description>"
@@ -490,65 +465,7 @@ git add <designPath>/ && git commit -m "feat(design): <description>"
 - **If ticket mode:** Include ticket ref in the commit body: `#<ticket-id>`
 - **If ticketless mode:** Use the design description slug in the commit message
 
-### Step 6C: Push
-
-Push the branch to the remote:
-
-```bash
-git push -u origin feature/<branch-name>
-```
-
-**If push fails** (sandbox network restriction or auth issue):
-- Display the exact push command to the user
-- Ask the user to run it manually and confirm when done
-- Do not retry automatically
-
-### Step 6D: Create PR
-
-**Shell rules**: Use the temp-file pattern from the `shell-rules` skill — no heredocs.
-
-1. Write the PR body to a temp file:
-
-```bash
-printf '%s' '<pr-body-content>' > /tmp/claude/design-pr-body.md
-```
-
-**PR body template:**
-
-```markdown
-## Summary
-<1-3 bullet points describing the design>
-
-## Ticket
-<ticket-mode only: Closes #<ticket-id>>
-
-## Design Files
-- Design file: `<designPath>/<pen-file-name>`
-- Design spec: `<designPath>/DESIGN.md`
-
-## Design Preview
-<For each screen: textual description. If screenshot files were committed, also include:>
-![<Screen Name>](<designPath>/screenshots/<screen-name>.png)
-
-## Screens Designed
-<Bulleted list of each screen/component with brief description>
-
-## Design Decisions
-<Key choices: aesthetic tone, color palette, typography, layout approach, component library>
-
-## Notes
-<Any caveats, open questions, or implementation guidance>
-
-🎨 Generated with [Claude Code](https://claude.com/claude-code) using ccflow design skill
-```
-
-2. Create the PR:
-
-```bash
-BODY=$(cat /tmp/claude/design-pr-body.md) && gh pr create --title "feat(design): <short-description>" --body "$BODY" --repo <owner>/<repo>
-```
-
-### Step 6E: Label Ticket
+### Step 6C: Label Ticket
 
 **If ticketless mode:** Skip labeling.
 
@@ -557,22 +474,18 @@ BODY=$(cat /tmp/claude/design-pr-body.md) && gh pr create --title "feat(design):
 gh issue edit <number> --repo <owner>/<repo> --add-label "Designed" --remove-label "Working"
 ```
 
-### Step 6F: Error Recovery
+### Step 6D: Error Recovery
 
-- **Push fails** → Display command, ask user to push manually (covered in Step 6C)
-- **PR creation fails** → Retry once. If it fails again, display the `gh pr create` command for the user to run manually
-- **Branch already exists** → Ask via `AskUserQuestion`: "Branch `feature/<name>` already exists. Reuse it or recreate?" Options: "Reuse existing (checkout)", "Delete and recreate"
+- **Commit fails** → Display the `git add` / `git commit` commands and ask the user to run them manually. Do not retry automatically.
+- **Label update fails** → Report the failure and continue; do not block on it.
 
-## After PR
+## After Commit
 
-Switch back to `main`:
-```bash
-git checkout main
-```
-
-Report the PR URL to the user. Then **STOP.** Do not:
+**STOP.** Do not:
 - Enter plan mode or propose an implementation plan
 - Offer to run `/implement` or start implementation
 - Suggest next steps beyond telling the user to run `/ccflow:implement` when ready
 
-Tell the user: "Design PR created: `<PR-URL>`. Run `/ccflow:implement <ticket-id>` when ready to implement."
+Final message:
+- **Ticket mode:** "Design committed on `main`. Run `/ccflow:implement <ticket-id>` when ready to implement."
+- **Ticketless mode:** "Design committed on `main`."
