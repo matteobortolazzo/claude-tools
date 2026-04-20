@@ -124,6 +124,10 @@ docker build --build-arg DOTNET_SDK_VERSION=10.0.200 \
 | `~/.claude/.credentials.json` | `/tmp/host-claude-creds/` (staging) | Claude OAuth tokens (copied to home on start) |
 | `~/.config/gh/hosts.yml` | `/tmp/host-gh-config/` (staging) | GitHub CLI tokens (copied to home on start) |
 
+### MCP servers
+
+MCP servers are picked up from project-scoped `.mcp.json` files inside the workspace (e.g. `./.mcp.json` under the project you're working on). The launcher forwards `CONTEXT7_API_KEY` from the host when set, so `.mcp.json` entries referencing `${CONTEXT7_API_KEY}` resolve correctly inside the container.
+
 ### Docker (optional, opt-in)
 
 Mount the host Docker/Podman socket into the container for Docker-outside-of-Docker (DooD):

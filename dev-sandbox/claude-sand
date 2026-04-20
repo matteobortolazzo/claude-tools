@@ -98,13 +98,17 @@ fi
 # ── Build claude command args ────────────────────────────────────
 CLAUDE_CMD_ARGS=(--allowedTools "${ALLOWED_TOOLS}")
 
+# ── Exec env forwarding (for attach path) ───────────────────────
+EXEC_ENV_ARGS=(-e "TMUX_PANE=${TMUX_PANE:-}")
+[[ -n "${CONTEXT7_API_KEY:-}" ]] && EXEC_ENV_ARGS+=(-e "CONTEXT7_API_KEY=${CONTEXT7_API_KEY}")
+
 # ── Attach to running container ─────────────────────────────────
 if "${RUNTIME}" ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
     if "${SHELL_ONLY}"; then
         echo "Attaching shell to running '${CONTAINER_NAME}'..."
-        "${RUNTIME}" exec -it "${CONTAINER_NAME}" /bin/bash
+        "${RUNTIME}" exec -it "${EXEC_ENV_ARGS[@]}" "${CONTAINER_NAME}" /bin/bash
     else
-        "${RUNTIME}" exec -it -e "TMUX_PANE=${TMUX_PANE:-}" "${CONTAINER_NAME}" claude "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
+        "${RUNTIME}" exec -it "${EXEC_ENV_ARGS[@]}" "${CONTAINER_NAME}" claude "${CLAUDE_CMD_ARGS[@]}" "${CLAUDE_ARGS[@]}"
     fi
     exit $?
 fi
@@ -175,6 +179,7 @@ if "${HOST_NETWORK}"; then
 fi
 
 [[ -n "${COLORTERM:-}" ]] && RUN_ARGS+=(-e "COLORTERM=${COLORTERM}")
+[[ -n "${CONTEXT7_API_KEY:-}" ]] && RUN_ARGS+=(-e "CONTEXT7_API_KEY=${CONTEXT7_API_KEY}")
 
 # Docker socket (opt-in DooD)
 if "${DOCKER_SOCKET}"; then
