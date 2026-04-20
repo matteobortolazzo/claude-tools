@@ -410,7 +410,7 @@ Summarize what was created:
 - `DESIGN.md` path, screen count, component count, token count
 
 Include this note at the end of the report:
-> "Note: The design file remains open in Pencil. Close it manually when done reviewing."
+> "Note: Pencil does not auto-save. Save the `.pen` file manually in Pencil (Cmd/Ctrl+S) before closing — unsaved `batch_design` changes will be lost. The design file remains open for your review."
 
 ### Label "Working" (at start)
 
@@ -424,6 +424,18 @@ gh issue edit <number> --repo <owner>/<repo> --add-label "Working"
 ## Phase 6 — Commit Design
 
 After Phase 5 reporting is complete, commit the design artifacts on the current branch. **No branch switch, no push, no PR.**
+
+### Step 6.0: Manual Save Reminder (REQUIRED)
+
+**Pencil does NOT auto-save `.pen` files.** Changes made via `batch_design` exist only in the open editor until the user manually saves. `git add` reads from disk, so committing without saving captures a stale `.pen` file.
+
+Before proceeding, prompt the user via `AskUserQuestion`:
+> "Pencil does not auto-save. Please save the `.pen` file in Pencil now (File → Save or Cmd/Ctrl+S), then confirm."
+
+Options: "Saved, proceed", "Cancel commit"
+
+- **"Saved, proceed"** → continue to Step 6A.
+- **"Cancel commit"** → **Stop.** Do not commit.
 
 ### Step 6A: Capture Design Screenshots
 
