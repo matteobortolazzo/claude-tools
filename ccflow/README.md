@@ -87,6 +87,23 @@ claude
 /ccflow:implement 12345
 ```
 
+## Working from your phone
+
+ccflow skills (`/refine`, `/implement`, `/design`) are **interactive** — they ask clarifying questions and iterate. Triggering them via one-shot mechanisms (GitHub Actions, webhook, `claude --print`) drops all conversation state after each turn, which defeats their whole design.
+
+**The fit-for-purpose answer is SSH + tmux**, which you probably already have:
+
+1. **On laptop**: keep Claude Code running in a named tmux window (e.g. `tmux new -As ccflow`).
+2. **Expose the laptop to your phone** via [Tailscale](https://tailscale.com) (or any VPN/SSH-accessible network).
+3. **On phone**: install an SSH client — [Blink](https://blink.sh) (iOS), [Termius](https://termius.com) (iOS/Android), or [Termux](https://termux.dev) (Android).
+4. **From phone**: SSH into your laptop, `tmux attach -t ccflow`, and type `/ccflow:refine 42` — you get the full interactive experience. Close the app; tmux keeps the session alive; reconnect anytime.
+
+**Why this beats GH-comment or remote bots:**
+- Real conversation state — skills ask questions, you answer, they proceed. Just like your desk.
+- `/clear`, `/compact`, and every other Claude Code feature works normally.
+- No new code to maintain, no webhook infra, no session-resume plumbing.
+- Browse issues in the GH mobile app; trigger skills via SSH. Two apps, zero friction.
+
 ### What `/ccflow:configure` creates
 
 ```
