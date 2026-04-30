@@ -16,8 +16,8 @@ Read the `subagent-safety` reference skill before delegating work to subagents.
 
 Read `.claude/config.json`.
 Read the `claudeMdLocation` field from `.claude/config.json` to determine where `CLAUDE.md` is located (defaults to `.claude/CLAUDE.md` if not set).
-Read `.claude/rules/lessons-learned.md` before any implementation.
-Read `.claude/rules/git-workflow.md` for commit and PR conventions.
+
+> **Progressive disclosure**: Do NOT read `.claude/rules/*.md` files in this Context section. The planner subagent reads `lessons-learned.md` and any topic-specific rule files relevant to the work as part of its analysis. `git-workflow.md` is only consulted in Phase 9 (commits/PRs). Reading them eagerly here just inflates the main agent's context.
 
 ### Monorepo Context Loading
 
@@ -25,9 +25,8 @@ If `isMonorepo` is `true` in `.claude/config.json`:
 
 1. **Determine affected project(s)**: From the ticket description and file paths, match against the `projects` array in config to identify which project(s) the ticket affects.
 2. **Read per-project CLAUDE.md**: For each affected project, read `<project-path>/CLAUDE.md` for project-specific stack details and conventions.
-3. **Read per-project lessons**: For each affected project, read `.claude/rules/lessons-learned-<slug>.md` for project-specific lessons.
-4. **Use project-specific commands**: When delegating to subagents, use the project's `buildCommand` and `testCommand` from config instead of inferring them globally.
-5. **Pass project context to subagents**: When delegating to planner/implementer, include the per-project CLAUDE.md content and per-project lessons alongside the global context.
+3. **Use project-specific commands**: When delegating to subagents, use the project's `buildCommand` and `testCommand` from config instead of inferring them globally.
+4. **Pass project context to subagents**: When delegating to planner/implementer, include the per-project CLAUDE.md content and the path to the per-project lessons file (`.claude/rules/lessons-learned-<slug>.md`). Do NOT read that lessons file in the main agent — let the planner subagent read it on demand if it exists.
 
 ### Design Context Loading
 
@@ -266,8 +265,8 @@ starts a new turn.
 
 **If ticket mode:** Delegate to the **planner** agent with:
 - Full ticket details (description, acceptance criteria, technical notes)
-- Relevant lessons from `.claude/rules/lessons-learned.md`
-- Relevant rules from `.claude/rules/` files
+- A note that the planner should read `.claude/rules/lessons-learned.md` (if it exists) and any topic-relevant rule files itself — do NOT pre-load and pass them
+- A note that the planner should read project `CLAUDE.md` and `README.md` if relevant to the change — these govern conventions and user-visible behavior
 - **User context** from the arguments (if provided) — present this as additional instructions that should steer the plan. For example: "The user provided this additional context: *focus on the API layer only*"
 - **Design spec** (if `designSpec` was loaded): Include the full DESIGN.md content. Tell the planner: "A design spec is available. Include a **Design Mapping** section in the plan output that maps design components (from the Components table) to framework components that will be created or modified. Reference design tokens (CSS custom properties) where applicable."
 - **Design reference**: If the ticket body references a `.pen` file path (created by `/ccflow:design`), mention it to the planner so it knows a visual design exists. The planner should note this in its plan so the implementer can reference it during build.
@@ -275,8 +274,8 @@ starts a new turn.
 
 **If ticketless mode:** Delegate to the **planner** agent with:
 - The **task description** from `$ARGUMENTS` as the primary specification
-- Relevant lessons from `.claude/rules/lessons-learned.md`
-- Relevant rules from `.claude/rules/` files
+- A note that the planner should read `.claude/rules/lessons-learned.md` (if it exists) and any topic-relevant rule files itself — do NOT pre-load and pass them
+- A note that the planner should read project `CLAUDE.md` and `README.md` if relevant to the change
 - **Design spec** (if `designSpec` was loaded): Include the full DESIGN.md content. Tell the planner: "A design spec is available. Include a **Design Mapping** section in the plan output that maps design components to framework components. Reference design tokens where applicable."
 - Note that there are no formal acceptance criteria — the planner should derive scope from the description and clarify ambiguities via questions
 
@@ -388,9 +387,9 @@ If "Request Changes":
 
 If the task appears too large to implement well in a single PR, recommend the user go back to `/refine` to split it into separate independent tickets (ticket mode) or narrow the scope of the description (ticketless mode) rather than attempting inline decomposition.
 
-#### Step 1E: Persist Plan (after approval)
+#### Step 1E: Persist Plan and Stop (after approval)
 
-After the user approves the plan in Step 1D, persist it to disk before proceeding:
+After the user approves the plan in Step 1D, persist it to disk and **end the skill**. Implementation always resumes in a fresh session — fresh context produces better builds and avoids carrying planning chatter into the implementation phase.
 
 1. Create the plans directory: `mkdir -p .plans/`
 2. Compose the plan file with YAML front matter and markdown body:
@@ -437,10 +436,19 @@ planCommitSha: abc123def
    - **Ticketless mode**: `.plans/<slug>.md`
 4. Record `planCommitSha` as the output of `git rev-parse HEAD`
 5. For ticketless mode, omit `ticketId`, `ticketTitle`, `isChild`, `isLastChild`, and `parentId` from the front matter.
-6. Inform the user: "Plan saved to `.plans/<filename>`. You can continue now or resume in a new session."
-7. Ask the user using `AskUserQuestion`:
-   - **"Continue implementation now"** — proceed to Phase 2 (current flow preserved)
-   - **"Stop here (implement later in a fresh session)"** — end the skill. The plan file remains for later use. Tell the user: "Plan saved. Start a new session and run `/ccflow:implement .plans/<filename>` to resume, or the SessionStart hook will remind you."
+6. **Stop the skill**. Tell the user verbatim:
+
+   > Plan saved to `.plans/<filename>`.
+   >
+   > To implement, start a fresh session and run:
+   >
+   > ```
+   > /ccflow:implement .plans/<filename>
+   > ```
+   >
+   > The SessionStart hook will also remind you of pending plans.
+
+7. Do NOT continue to Phase 2 in this session. Do NOT call any further tools. Your response ends here.
 #### Optional: Deep Codebase Exploration
 
 If `.claude/config.json` contains `"deepExploration": true`, run an exploration step **before** Step 1A:
@@ -456,11 +464,10 @@ If `deepExploration` is not set or is `false`, skip directly to Step 1A (the def
 ### Phase 2: Worktree Setup
 
 **GATE CHECK — Verify before proceeding:**
-1. You presented the full plan text in Step 1D ✓
-2. The user explicitly selected "Approve" in their response ✓
-3. This is a NEW turn — not the same turn where you presented the plan ✓
+1. `hasPlanFile` is true — you entered this skill with a plan file path, OR you just persisted a plan in Step 1E. ✓
+2. The plan file exists at `.plans/<filename>` and was read during mode detection (or was just written in Step 1E). ✓
 
-If ANY of these are false, STOP. Go back to Step 1D.
+Phase 2 only ever runs when invoked **with** a plan file. If `hasPlanFile` is false (i.e. you just produced a plan from a ticket or task description), Step 1E already stopped the skill and instructed the user to resume in a fresh session — do NOT continue to Phase 2 in that case.
 
 After plan approval, create a git worktree for this feature.
 
@@ -641,8 +648,9 @@ If Pencil is unavailable (`pencilAvailable = false`), skip this section and note
 
 - Follow the approved plan exactly
 - Make failing tests pass with the **simplest correct implementation**
-- Follow patterns from `.claude/rules/` files
-- Follow lessons from `.claude/rules/lessons-learned.md`
+- Follow patterns from `.claude/rules/` files relevant to the change
+- Honor `CLAUDE.md` (conventions) and `README.md` (user-visible contracts); update them in the same change if your work alters either
+- Follow lessons from `.claude/rules/lessons-learned.md` if it exists
 - No premature abstractions — keep it simple
 - No dead code, no commented-out code, no TODOs without ticket references
 
@@ -821,26 +829,36 @@ This runs in parallel with the security and code reviewers.
 <details>
 <summary>### Phase 8: Capture Lessons & Update Docs</summary>
 
-Skip entirely if no self-corrections occurred and no doc updates are warranted.
+**Default action: skip.** This phase is opt-in. Only run a sub-step if its specific trigger fired.
 
 **Prerequisites**: Code review and security review complete, all fixes applied. Running inside the worktree.
 
 **Worktree rooting (applies to all sub-steps):** All file edits in this phase MUST land **inside the feature worktree** so Phase 9's `git add -A` captures them in the PR. When delegating to subagents or performing Read/Write/Edit here, always reference files by absolute paths rooted at `<worktree-path>` (the path from Phase 2). Relative paths like `.claude/rules/lessons-learned.md` resolve against the main-agent's root — typically the main worktree — and their changes will be stranded outside the PR.
 
-#### Step 8A: Capture Lessons
+#### Step 8A: Capture Lessons (opt-in)
 
-Delegate to the **lessons-collector** agent.
-Skip if no self-corrections occurred during the session.
+Lessons are NOT mandatory and NOT a per-PR ritual. They exist to prevent **future agents from repeating a specific mistake** that happened during *this* session.
 
-1. Review the conversation/session for self-corrections:
-   - Build errors that required fixes
-   - Wrong APIs or patterns used then corrected
-   - Test failures with non-obvious causes
-   - Incorrect assumptions that led to rework
-2. If self-corrections occurred, delegate to the **lessons-collector** agent. **Pass `<worktree-path>` as the project root** and instruct the agent to prefix every rule-file path with it (e.g. `<worktree-path>/.claude/rules/lessons-learned.md`).
-3. The agent appends entries to `<worktree-path>/.claude/rules/lessons-learned.md` in the target project so they're staged with the feature commit.
+**Trigger — only run Step 8A if at least one of these occurred:**
+- A build/test failure that needed a non-obvious fix (not just "fixed a typo")
+- The wrong API/pattern was used, then corrected after discovery
+- An assumption turned out to be wrong and caused rework
+- A reviewer flagged something the implementer should have caught
 
-**Skip Step 8A if no self-corrections occurred during the session.**
+**Do NOT run Step 8A if:**
+- The session went smoothly (followed the plan, tests passed, no rework)
+- The only "corrections" were normal TDD red→green progression
+- Findings were already obvious from the code or existing rules
+
+When the trigger fires, delegate to the **lessons-collector** agent. **Pass `<worktree-path>` as the project root** and instruct the agent to prefix every file path with it.
+
+The agent prefers updating existing docs over appending new entries. Its routing priority:
+1. Update an existing rule file in `<worktree-path>/.claude/rules/<topic>.md` if the lesson fits one
+2. Update `<worktree-path>/<CLAUDE.md path>` if the lesson is a project-wide rule worth permanent placement
+3. Create a new rule file only if 2+ findings cluster on a new topic
+4. Append to `<worktree-path>/.claude/rules/lessons-learned.md` ONLY as a last resort for cross-cutting process mistakes that don't fit anywhere else
+
+The agent must return "No lessons captured" if nothing meets the bar — empty output is a valid and expected result.
 
 ##### Quality Criteria for Lessons
 
@@ -848,11 +866,11 @@ Each lesson must be:
 - **Specific** — "Used `findOne` instead of `findUnique` in Prisma" not "Made a mistake"
 - **Actionable** — includes a clear rule to prevent recurrence
 - **Non-duplicate** — check existing entries before adding
+- **Worth keeping forever** — if it's only relevant to this PR, leave it in the PR description, not in a rule file
 
 ##### Error Recovery
 
-If `<worktree-path>/.claude/rules/lessons-learned.md` doesn't exist, create it with a header.
-If it exceeds 100 entries, suggest consolidating related entries into permanent rules in `<worktree-path>/.claude/rules/<topic>.md`.
+If `<worktree-path>/.claude/rules/lessons-learned.md` doesn't exist, do NOT create it just to add an entry — that defeats the "last resort" rule. Pick a topic-specific rule file or CLAUDE.md instead. Only create `lessons-learned.md` if the project's `.claude/rules/` truly has no suitable home and the user explicitly opted into the lessons-learned workflow during `/ccflow:configure`.
 
 #### Step 8B: Update CLAUDE.md (if warranted)
 
@@ -897,6 +915,8 @@ If it exceeds 100 entries, suggest consolidating related entries into permanent 
 Rebase on latest main, then handle commit, push, and PR creation.
 
 **Prerequisites**: Code review complete, all Must Fix items resolved, tests pass. Network access required for `git fetch`.
+
+**Read `<worktree-path>/.claude/rules/git-workflow.md`** now (deferred from the Context section) for commit and PR conventions. It governs the commit/branch/PR formatting for the rest of this phase.
 
 **If `hasPlanFile` is true**: Source `ticketId`, `slug`, `isChild`, `isLastChild`, and `parentId` from the plan file's front matter for commit messages, branch names, and PR body references.
 

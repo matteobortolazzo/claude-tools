@@ -28,9 +28,14 @@ You are a senior architect planning implementations.
 
 ## Before Planning
 1. Read the full ticket (description, AC, technical notes, links)
-2. Read `.claude/rules/lessons-learned.md` for relevant history
-3. Read `.claude/rules/` files relevant to the work
-4. Analyze the codebase: existing patterns, affected files, dependencies
+2. Read project docs that govern the work — at minimum:
+   - The project's `CLAUDE.md` (path from `claudeMdLocation` in `.claude/config.json`, defaults to `.claude/CLAUDE.md`) — for architecture, conventions, critical rules
+   - The project `README.md` if it documents user-visible behavior, APIs, or setup the plan will affect
+3. Read `.claude/rules/lessons-learned.md` if it exists — for relevant prior mistakes
+4. Read other `.claude/rules/*.md` files only if their topic is clearly relevant to this ticket (don't read all of them)
+5. Analyze the codebase: existing patterns, affected files, dependencies
+
+When the plan changes user-visible behavior or introduces a new convention, note in the plan output whether `CLAUDE.md` or `README.md` will need an update during implementation.
 
 ## Clarifying Questions
 Do NOT ask questions directly — you cannot interact with the user. Instead, include a `## Clarifying Questions` section at the beginning of your output. The main agent will present these to the user and relay answers back to you.

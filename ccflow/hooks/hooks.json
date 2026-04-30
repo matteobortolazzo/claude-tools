@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Reminder: If there were any self-corrections during this session (build errors fixed, wrong approaches retried), capture them in .claude/rules/lessons-learned.md'",
+            "command": "echo 'Reminder: only capture lessons that would prevent a future agent from repeating a *specific* non-obvious mistake. Prefer updating an existing rule file or CLAUDE.md over appending to lessons-learned.md. If the session went smoothly, capture nothing.'",
             "timeout": 10000
           }
         ]
