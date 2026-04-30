@@ -6,7 +6,7 @@
 <ticket-system> for tracking. <pr-system> for code and PRs.
 
 ## Critical Rules
-- ALWAYS read relevant `.claude/rules/` files before working on any layer.
+- ALWAYS read relevant `docs/` files when working in their topic area (e.g., `docs/git-workflow.md` before commits/PRs).
 - Test-first: integration tests that assert behavior, not implementation details.
 - No secrets, credentials, or API keys in code.
 - No PII or stack traces in user-facing error responses.
@@ -20,7 +20,9 @@
 - ALWAYS read DESIGN.md before implementing any frontend feature
 <!-- END IF -->
 
-## Rule Files
-See `.claude/rules/` for conventions:
-- `lessons-learned.md` — real mistakes from this codebase (authoritative, overrides assumptions)
-- `git-workflow.md` — branching, commits, PRs, versioning
+## Reference Docs
+On-demand topic docs live in `docs/` at the repo root. Read the file matching your work area:
+- `docs/git-workflow.md` — branching, commits, PRs, versioning
+- Additional `docs/<topic>.md` files may be created over time as conventions emerge.
+
+`.claude/rules/` is reserved for files explicitly `@`-imported by this CLAUDE.md (auto-loaded at session start). Don't put reference docs there.

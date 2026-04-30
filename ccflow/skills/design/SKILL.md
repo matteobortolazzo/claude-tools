@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, WebFetch, mcp__pe
 <!-- Architecture note: ccflow orchestrates Pencil via `pencil interactive` CLI (ccflow-driven model).
      We do NOT use `pencil --agent-config` because:
      1. ccflow needs ticket/worktree/approval workflow integration that agent-config agents lack
-     2. agent-config agents have no ccflow context (config, rules, lessons-learned)
+     2. agent-config agents have no ccflow context (config, CLAUDE.md, docs/)
      3. For complex designs, we batch via multiple `batch_design` calls within one session
      The Pencil editor is the design engine; Claude Code drives it via CLI subprocess (or MCP as legacy fallback).
      CLI mode (`pencil interactive -a desktop`) avoids loading MCP tool schemas into every conversation,
@@ -120,7 +120,7 @@ Read the ticket body and look for a **Design Direction** section (produced by `/
 
 **If ticketless mode:** Skip ticket fetching. The design description from `$ARGUMENTS` is the primary input.
 
-Read `.claude/rules/lessons-learned.md` for any entries related to design or this feature area.
+Read any relevant `docs/<topic>.md` files for entries related to design or this feature area. If a legacy `.claude/rules/lessons-learned.md` exists in the project, read it as fallback.
 
 ## Phase 1 — Attachments
 

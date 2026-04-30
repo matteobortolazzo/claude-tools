@@ -70,7 +70,7 @@ ticket is unambiguous, well-scoped, and ready for implementation.
 
 1. **Fetch and summarize** the ticket (title, description, acceptance criteria, linked items)
 
-2. **Read `.claude/rules/lessons-learned.md`** for any entries related to this feature area
+2. **Read relevant `docs/<topic>.md`** files for the feature area. If a legacy `.claude/rules/lessons-learned.md` exists, read it as fallback.
 
 3. **If user context was provided**, treat it as additional steering input. Focus your analysis and questions on the areas the user highlighted. Mention the user's context when it's relevant to your questions or analysis.
 

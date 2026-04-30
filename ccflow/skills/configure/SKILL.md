@@ -351,9 +351,13 @@ After gathering answers:
 
    Omit the `args` field if the catalog entry has an empty array `[]`.
 
-2. Create `.claude/rules/` directory with these rule files from `${CLAUDE_PLUGIN_ROOT}/templates/rules/`:
-   - `git-workflow.md` — branching, commit format, PR workflow
-   - `lessons-learned.md` — mistake tracking (always deployed)
+2. Create the `docs/` directory at the repo root (if it doesn't exist) and deploy on-demand reference docs from `${CLAUDE_PLUGIN_ROOT}/templates/docs/`:
+   - `docs/git-workflow.md` — branching, commit format, PR workflow
+
+   `.claude/rules/` is reserved for files explicitly `@`-imported by `CLAUDE.md` (auto-loaded at session start). Do NOT deploy reference docs there. Today, configure does not write any files into `.claude/rules/` — leave it absent unless the user opts into auto-loaded rules later.
+
+   **Backward compatibility**: Do NOT delete or migrate any existing `.claude/rules/lessons-learned.md`, `.claude/rules/lessons-learned-<slug>.md`, or `.claude/rules/git-workflow.md` files. Skills and agents continue to read them as legacy fallback if present.
+
    Do NOT deploy `testing.md` or `security.md` — testing rules load on-demand via the `testing` skill, and security rules are distributed across root CLAUDE.md (universal), per-project CLAUDE.md (stack-specific), and stack skills.
 
 **Monorepo-only additional files:**
@@ -366,14 +370,9 @@ After gathering answers:
    - `<test-framework>`: detected test framework
    - `<build-command>`: detected or user-provided build command
    - `<test-command>`: detected or user-provided test command
-   - `<slug>`: the project slug for the lessons-learned reference
    - `<project-specific rules populated during configure>`: leave as a placeholder for the user to fill in later, or remove the bullet if no conventions are known yet
 
-3b. For each project, create `.claude/rules/lessons-learned-<slug>.md` using the template at `${CLAUDE_PLUGIN_ROOT}/templates/rules/lessons-learned-project.md` — customize with:
-   - `<project-name>`: the project name
-   - `<path>`: the project path
-
-3c. **Create design directories** (only if Pencil was enabled in question 5b):
+3b. **Create design directories** (only if Pencil was enabled in question 5b):
    - **Single project or shared monorepo** (`pencil.shared` is `true` or not a monorepo): Create `designs/` at the repo root: `mkdir -p designs/`
    - **Separate monorepo**: For each frontend project that has a `designPath`, create its directory: `mkdir -p <project-path>/designs/`
 

@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Reminder: only capture lessons that would prevent a future agent from repeating a *specific* non-obvious mistake. Prefer updating an existing rule file or CLAUDE.md over appending to lessons-learned.md. If the session went smoothly, capture nothing.'",
+            "command": "echo 'Reminder: only capture lessons that would prevent a future agent from repeating a *specific* non-obvious mistake. Route them to an existing docs/<topic>.md, to CLAUDE.md (if it is a project-wide invariant), or create a new docs/<topic>.md when 2+ findings cluster on a topic. Never write to .claude/rules/lessons-learned.md (deprecated). If the session went smoothly, capture nothing.'",
             "timeout": 10000
           }
         ]
@@ -40,15 +40,6 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/check-lessons-file.sh",
-            "timeout": 10000
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/check-monorepo-lessons.sh",
             "timeout": 10000
           }
         ]

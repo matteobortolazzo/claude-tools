@@ -33,5 +33,5 @@
 - Read DESIGN.md before implementing any frontend feature in this project
 <!-- END IF -->
 
-## Lessons
-See `.claude/rules/lessons-learned-<slug>.md` for project-specific lessons.
+## Reference Docs
+Repo-level conventions live at `<repo-root>/docs/` (read on demand). Project-specific notes belong in this file.

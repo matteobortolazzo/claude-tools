@@ -4,7 +4,7 @@ Monorepo with <N> projects. <ticket-system> for tracking. <pr-system> for PRs.
 
 ## Critical Rules
 - ALWAYS read the CLAUDE.md in the project directory you are working in.
-- Read `.claude/rules/` files for repo-wide conventions.
+- Read relevant `docs/` files when working in their topic area (e.g., `docs/git-workflow.md` before commits/PRs).
 - Test-first: integration tests that assert behavior, not implementation details.
 - No secrets, credentials, or API keys in code.
 - No PII or stack traces in user-facing error responses.
@@ -28,7 +28,9 @@ Each frontend project has its own design directory. See per-project CLAUDE.md fo
 - ALWAYS read the project's DESIGN.md before implementing any frontend feature
 <!-- END IF -->
 
-## Rule Files
-See `.claude/rules/` for conventions:
-- `lessons-learned.md` — real mistakes from this codebase (authoritative)
-- `git-workflow.md` — branching, commits, PRs, versioning
+## Reference Docs
+On-demand topic docs live in `docs/` at the repo root. Read the file matching your work area:
+- `docs/git-workflow.md` — branching, commits, PRs, versioning
+- Additional `docs/<topic>.md` files may be created over time as conventions emerge.
+
+`.claude/rules/` is reserved for files explicitly `@`-imported by this CLAUDE.md (auto-loaded at session start). Don't put reference docs there.

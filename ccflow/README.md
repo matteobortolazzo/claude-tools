@@ -110,14 +110,23 @@ ccflow skills (`/refine`, `/implement`, `/design`) are **interactive** — they 
 your-project/
 ├── CLAUDE.md              # (or in .claude/ — user's choice during configure)
 ├── .claudeignore          # Files tracked by git but excluded from Claude's context
+├── docs/
+│   └── git-workflow.md    # On-demand reference: branching, commits, PRs
 ├── .claude/
 │   ├── config.json        # ccflow configuration (includes claudeMdLocation)
-│   ├── settings.json      # Sandbox, permissions, and allowed domains
-│   └── rules/
-│       ├── lessons-learned.md   # Captured mistakes for future prevention
-│       └── <stack-rules>.md     # Stack-specific coding rules
+│   └── settings.json      # Sandbox, permissions, and allowed domains
 └── .worktrees/            # Git worktrees for feature branches (gitignored)
 ```
+
+**Where reference docs live**
+
+- `docs/<topic>.md` — on-demand reference docs read by skills/agents when their topic intersects the work. The lessons-collector also routes new topic-specific lessons here.
+- `CLAUDE.md` — always loaded. Holds critical rules and project-wide invariants.
+- `.claude/rules/` — reserved for files explicitly `@`-imported by `CLAUDE.md` (auto-loaded at session start). Configure does not create files here today.
+
+**Backward compatibility**
+
+If your project already has `.claude/rules/lessons-learned.md` (or `lessons-learned-<slug>.md`) from an earlier ccflow setup, ccflow leaves it in place and skills still read it as a legacy fallback. New lessons go to `docs/` or `CLAUDE.md` only.
 
 ### Monorepo Support
 
@@ -129,7 +138,7 @@ For monorepos, `/ccflow:configure` detects projects automatically and creates a 
 |------|-----------|---------|---------|
 | Root | `CLAUDE.md` at repo root | Eager | Repo-wide conventions, projects table, critical rules |
 | Project | `packages/api/CLAUDE.md` etc. | Lazy (on file access) | Stack, build/test commands, project conventions |
-| Global Rules | `.claude/rules/*.md` | Eager | Lessons learned, testing philosophy, security, git workflow |
+| Reference docs | `docs/<topic>.md` at repo root | On-demand | Git workflow + topic-specific lessons routed by the collector |
 
 **Monorepo file structure:**
 
@@ -137,6 +146,8 @@ For monorepos, `/ccflow:configure` detects projects automatically and creates a 
 your-project/
 ├── CLAUDE.md                  # Root — projects table + critical rules (eager)
 ├── .claudeignore              # Files tracked by git but excluded from Claude's context
+├── docs/
+│   └── git-workflow.md        # On-demand reference (read by skills as needed)
 ├── packages/
 │   ├── api/
 │   │   └── CLAUDE.md          # Per-project — stack, build/test (lazy)
@@ -144,16 +155,11 @@ your-project/
 │       └── CLAUDE.md          # Per-project — stack, build/test (lazy)
 ├── .claude/
 │   ├── config.json            # ccflow configuration (includes isMonorepo + projects)
-│   ├── settings.json          # Sandbox, permissions, and allowed domains
-│   └── rules/
-│       ├── lessons-learned.md        # Repo-wide lessons (eager)
-│       ├── lessons-learned-api.md    # Per-project lessons (eager)
-│       ├── lessons-learned-web.md    # Per-project lessons (eager)
-│       └── <stack-rules>.md          # Stack-specific coding rules (eager)
+│   └── settings.json          # Sandbox, permissions, and allowed domains
 └── .worktrees/
 ```
 
-Per-project lessons stay in `.claude/rules/` (eager) because lessons are the highest-value context — the token cost of a few extra KB is outweighed by preventing repeated mistakes across project boundaries.
+Lessons are routed by topic (`docs/caching.md`, `docs/migrations.md`, …) rather than dumped into a single growing log. Project-wide invariants land in `CLAUDE.md` directly.
 
 ## Implementation Pipeline
 
@@ -166,7 +172,7 @@ When you run `/ccflow:implement <ticket-id>`, the pipeline executes these phases
 5. **Refactor** — Implementer agent simplifies and cleans up
 6. **Security Review** — Security reviewer agent checks for OWASP vulnerabilities
 7. **Code Review** — Code reviewer agent does a final PR-style review
-8. **Capture Lessons** — Lessons collector extracts mistakes into lessons-learned
+8. **Capture Lessons** — Lessons collector routes genuine mistakes into the relevant `docs/<topic>.md` or `CLAUDE.md` (opt-in; most sessions capture nothing)
 9. **Create PR** — Rebases on latest main, commits, pushes, and creates a pull request
 
 ## Ticket Splitting
@@ -183,7 +189,7 @@ The plugin uses specialized agents with isolated contexts:
 | **implementer** | TDD: writes tests first, then implementation | inherit | acceptEdits |
 | **security-reviewer** | OWASP-focused security review | sonnet | plan (read-only) |
 | **code-reviewer** | PR-style quality review | sonnet | plan (read-only) |
-| **lessons-collector** | Extracts mistakes into lessons-learned | haiku | acceptEdits |
+| **lessons-collector** | Routes genuine mistakes to `docs/<topic>.md` or `CLAUDE.md` | haiku | acceptEdits |
 
 External integrations use the `gh` CLI rather than MCP servers, keeping permissions simple and avoiding token overhead. Optional MCP servers: Context7 (live documentation lookup) and Pencil (design file creation via `/ccflow:design`).
 
@@ -251,8 +257,7 @@ ccflow/
 │   ├── claude-md-root-monorepo.md
 │   ├── claude-md-project.md
 │   ├── settings.json
-│   └── rules/
-│       ├── lessons-learned.md
-│       └── lessons-learned-project.md
+│   └── docs/
+│       └── git-workflow.md
 └── README.md
 ```

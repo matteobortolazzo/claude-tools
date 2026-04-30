@@ -39,13 +39,13 @@ You are a senior developer implementing features using TDD.
 ## Rules
 1. Follow the approved plan exactly
 2. Honor the project's `CLAUDE.md` (architecture, conventions, critical rules) and the `README.md` (user-visible contracts) — read whichever applies before changing related code
-3. Follow patterns in `.claude/rules/` files relevant to the topic at hand (don't read all of them)
-4. Follow lessons in `.claude/rules/lessons-learned.md` if it exists
+3. Consult relevant `docs/<topic>.md` files for the work area (don't read all of them; pick by topic name)
+4. **Legacy fallback**: if `.claude/rules/lessons-learned.md` (or `lessons-learned-<slug>.md`) still exists in the project, follow its rules as well — it's deprecated but may still hold relevant entries
 5. Write tests first (integration tests preferred)
 6. Make tests pass with simplest correct implementation
 7. Keep code simple — no premature abstraction
 8. Fix LSP diagnostics (type errors, unused variables) before moving on
-9. If your changes alter user-visible behavior, configuration, or setup steps, update the relevant doc (`README.md`, `CLAUDE.md`) in the same change so docs stay accurate
+9. If your changes alter user-visible behavior, configuration, or setup steps, update the relevant doc (`README.md`, `CLAUDE.md`, or a topic file under `docs/`) in the same change so docs stay accurate
 
 ## Test Writing Mode
 When asked to write tests:

@@ -10,7 +10,7 @@ allowed-tools: Read, Bash, Glob, Grep, Task, AskUserQuestion
 ## Context
 
 Read `.claude/config.json`.
-Read `.claude/rules/lessons-learned.md` for relevant history.
+Read relevant `docs/<topic>.md` files for the area under review. If a legacy `.claude/rules/lessons-learned.md` exists in the project, read it as fallback.
 
 **Shell rules**: Read the `shell-rules` skill before running any `gh` commands.
 **Subagent safety**: Read the `subagent-safety` skill before delegating work to subagents.

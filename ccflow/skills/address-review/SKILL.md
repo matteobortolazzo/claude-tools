@@ -27,7 +27,7 @@ Split `$ARGUMENTS` into:
 - **User context**: everything after the first token (may be empty).
   For example: `42 only address the test coverage comments` → context is `only address the test coverage comments`.
 
-Read `.claude/rules/lessons-learned.md` before addressing any comments.
+Read any relevant `docs/<topic>.md` files for the work area before addressing comments. If a legacy `.claude/rules/lessons-learned.md` exists in the project, read it as fallback.
 
 ## Pipeline
 
